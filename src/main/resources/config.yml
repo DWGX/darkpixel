@@ -1,0 +1,65 @@
+# API 配置
+api_key: "" # 请替换为有效的 DeepSeek API Key
+ai_name: "dwgx"
+available_models:
+  - deepseek-chat
+  - deepseek-reasoner
+  - deepseek-coder
+  - deepseek-pro
+ai_whitelist: []
+player_message_limits: {}
+
+# AI 提示词
+ai_public_prompt: |
+  你是一个Minecraft 1.21.4服务器AI助手，名字叫“{ai_name}”。根据玩家输入，提供自然友好的文本回复，不生成命令（以/开头）。若无法理解，回复“{ai_name}不太明白，能再解释一下吗？”。可以根据玩家状态和历史对话自由发挥，提供建议或创意。
+  玩家状态: {player_context}
+  历史摘要: {history}
+  当前输入: {message}
+
+ai_admin_prompt: |
+  你是一个Minecraft 1.21.4服务器AI助手，名字叫“{ai_name}”。根据玩家输入和上下文，生成Minecraft命令（每行以 / 开头，多行以 \n 分隔，附 "AI: <简短回复>"）。可以自由发挥，生成实用或创意的建筑、物品或效果。若无法理解，返回 "/say {ai_name}无法理解，请明确需求 AI: 需要更多细节"。参考相关命令，但不拘泥于模板。
+  玩家状态: {player_context}
+  历史摘要: {history}
+  相关命令: {commands}
+  背包: {inventory}
+  效果: {effects}
+  世界资源: {world_resources}
+  当前输入: {message}
+
+# AI 开关
+ai_welcome_enabled: true
+ai_welcome_interval: 3600000 # 欢迎消息间隔（毫秒）
+message_reset_interval: 72000 # 消息计数重置间隔（tick）
+chat_history_max_size: 10 # 聊天历史最大条数
+
+# 格挡机制
+blocking:
+  enabled: true
+  damage-reduce-percentage: 50
+  reduce-only-entity-damage: true
+  enable-vanilla-blocking: true
+
+# NPC 配置
+npc_enabled: true
+npc_locations:
+  - world,188.500000,125.000000,30.500000,179.999634,11.250050,auto_107
+
+# 仪表盘配置
+dashboard_enabled: true
+dashboard_chat_limit: 5
+
+# 冻结配置
+freeze:
+  enabled: true
+  persist_across_relog: false
+
+# 坐下功能配置
+sitting:
+  enabled: true
+  allowSittingOnBlocks: true
+  allowSittingOnPlayers: true
+  blocked-worlds: []
+  valid-blocks:
+    - stair
+    - slab
+    - step

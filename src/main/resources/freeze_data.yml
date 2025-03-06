@@ -1,0 +1,8 @@
+freeze:
+  currently_frozen: "§c你已被冻结，无法移动或跳跃"
+  unfrozen: "§a你已解冻，可以自由活动"
+  cant_damage: "§c你不能伤害 [username]，他目前处于冻结状态"
+  persist_across_relog: false
+  log_out_commands:
+    - "say [username] 在冻结状态下退出了服务器"
+frozen: {}

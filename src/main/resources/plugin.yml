@@ -1,0 +1,67 @@
+name: DarkPixel
+version: 1.0
+main: com.darkpixel.Main
+api-version: 1.21.4
+depend: [ProtocolLib, NBTAPI]
+
+commands:
+  aichat:
+    description: AI对话
+    usage: /<command> public|private <消息>|mode <模型>|setmodel <玩家> <模型>|whitelist|unwhitelist|setlimit|addlimit dashboard <次数>|history clear <玩家>|history open <玩家>|history stop <玩家>|adm <内容>
+  giveblockablesword:
+    description: 给予可格挡剑
+    usage: /<command> [player] [sword]
+    permission: darkpixel.giveblockablesword
+  dashboard:
+    description: 打开服务器大厅面板
+    usage: /<command>
+  hub:
+    description: 返回主城
+    usage: /<command>
+  geiwoqian:
+    description: 打开物资补给站
+    usage: /<command>
+  npc:
+    description: 管理大厅NPC
+    usage: /<command> [clear|remove <id>]
+    permission: darkpixel.npc.manage
+  toggleaiwelcome:
+    description: 开关AI欢迎功能
+    usage: /<command>
+    permission: darkpixel.admin
+  freeze:
+    description: 冻结或解冻玩家
+    usage: /<command> <player> [pvp|invincible|none] [autounfreeze <秒数>] 或 /<command> unfreeze <player>
+    permission: darkpixel.admin
+  setchattimes:
+    description: 设置玩家的发言次数
+    usage: /<command> <玩家> <次数>
+    permission: darkpixel.admin
+  sit:
+    description: Sit down on a block or toggle sitting permission
+    usage: /<command> [toggle]
+  togglesit:
+    description: Toggle sitting functionality globally
+    usage: /<command>
+    permission: darkpixel.admin
+  ping:
+    description: Check the ping of a player
+    usage: /<command> [player]
+  darkac:
+    description: Manage DarkAC anti-cheat
+    usage: /<command> <on|off|status>
+    permission: darkpixel.admin
+  report:
+    description: Report a player for cheating
+    usage: /<command> <player>
+
+permissions:
+  darkpixel.giveblockablesword:
+    description: 允许使用 /giveblockablesword 命令
+    default: op
+  darkpixel.npc.manage:
+    description: 允许管理大厅NPC（生成和删除）
+    default: op
+  darkpixel.admin:
+    description: 管理员权限
+    default: op

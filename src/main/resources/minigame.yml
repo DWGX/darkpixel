@@ -1,0 +1,169 @@
+games:
+  hub:
+    material: NETHER_STAR
+    x: 0
+    y: 100
+    z: 0
+    world: world
+    display: "§e主大厅"
+    lore: "§7点击使用 /trigger hub"
+  Bed_Wars:
+    material: RED_BED
+    x: 201
+    y: 115
+    z: 54.5
+    world: world
+    display: "§f起床战争"
+    lore: "§7点击加入起床战争"
+  Battle_Bridg:
+    material: DIAMOND_BLOCK
+    x: 201
+    y: 115
+    z: 52.5
+    world: world
+    display: "§f战桥"
+    lore: "§7点击加入战桥"
+  block_believer:
+    material: WHITE_WOOL
+    x: 197
+    y: 115
+    z: 58.5
+    world: world
+    display: "§f方块信徒"
+    lore: "§7点击加入信仰方块"
+  pve_game:
+    material: DEEPSLATE_EMERALD_ORE
+    x: 195
+    y: 115
+    z: 58.5
+    world: world
+    display: "§fPVE 游戏"
+    lore: "§7点击加入PVE 游戏"
+  repeling_war:
+    material: SPONGE
+    x: 193
+    y: 115
+    z: 58.5
+    world: world
+    display: "§f击退战争"
+    lore: "§7点击加入击退小游戏"
+  color_dingers:
+    material: LIGHT_BLUE_TERRACOTTA
+    x: 191
+    y: 115
+    z: 58.5
+    world: world
+    display: "§f色盲派对"
+    lore: "§7点击加入色盲派对"
+  snow:
+    material: PACKED_ICE
+    x: 189
+    y: 115
+    z: 58.5
+    world: world
+    display: "§f一掘到底"
+    lore: "§7点击加入一掘到底"
+  hot_potato:
+    material: PUMPKIN
+    x: 187
+    y: 115
+    z: 58.5
+    world: world
+    display: "§f烫手山芋"
+    lore: "§7点击加入烫手山芋"
+  repeling_war_winter:
+    material: LIGHT_BLUE_GLAZED_TERRACOTTA
+    x: 185
+    y: 115
+    z: 58.5
+    world: world
+    display: "§f击退冬泳"
+    lore: "§7点击加入击退小游戏“冬泳怪鸽”"
+  Secret_Room_Killer:
+    material: BLACK_CONCRETE
+    x: 183
+    y: 115
+    z: 58.5
+    world: world
+    display: "§f密室杀手"
+    lore: "§7点击加入密室杀手"
+  Survival_War:
+    material: CRAFTING_TABLE
+    x: 181
+    y: 115
+    z: 58.5
+    world: world
+    display: "§f生存战争"
+    lore: "§7点击加入生存战争"
+  Wools_War:
+    material: YELLOW_WOOL
+    x: 179
+    y: 115
+    z: 58.5
+    world: world
+    display: "§f羊毛战争"
+    lore: "§7点击加入羊毛战争"
+  Wolf_Killer:
+    material: ANCIENT_DEBRIS
+    x: 175
+    y: 115
+    z: 55.5
+    world: world
+    display: "§f狼人杀"
+    lore: "§7点击加入狼人杀"
+  Professional_warfare:
+    material: RAW_GOLD_BLOCK
+    x: 201
+    y: 120
+    z: 52.5
+    world: world
+    display: "§f职业战争"
+    lore: "§7点击加入职业战争"
+  After_Game:
+    material: RED_SAND
+    x: 201
+    y: 120
+    z: 55.5
+    world: world
+    display: "§f追杀游戏"
+    lore: "§7点击加入追杀游戏"
+  HUNGER_GAME:
+    material: BARREL
+    x: 197
+    y: 120
+    z: 58
+    world: world
+    display: "§f饥饿游戏"
+    lore: "§7点击加入饥饿游戏"
+  GAME_PARTY:
+    material: PURPUR_BLOCK
+    x: 187
+    y: 120
+    z: 58
+    world: world
+    display: "§f小游戏派对"
+    lore: "§7点击加入小游戏派对"
+  Sky_Wars:
+    material: FLETCHING_TABLE
+    x: 181
+    y: 120
+    z: 58
+    world: world
+    display: "§f空岛战争"
+    lore: "§7点击加入空岛战争"
+  Desktop_game:
+    material: CHISELED_BOOKSHELF
+    x: 201
+    y: 125
+    z: 52.5
+    world: world
+    display: "§f桌游"
+    lore: "§7点击加入桌游"
+  Chest_game:
+    material: PRISMARINE_BRICKS
+    x: 201
+    y: 125
+    z: 55.5
+    world: world
+    display: "§f棋类游戏"
+    lore: "§7点击加入棋类游戏"

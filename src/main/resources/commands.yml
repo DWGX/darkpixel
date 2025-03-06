@@ -1,0 +1,295 @@
+commands:
+  freeze:
+    trigger: ["冻结", "定住", "锁住"]
+    format: "/freeze <player> [pvp|invincible|none] [autounfreeze <seconds>]"
+    reverse: "/freeze unfreeze <player>"
+    description: "冻结玩家，可指定保护级别和自动解冻时间"
+  unfreeze:
+    trigger: ["解冻", "unfreeze"]
+    format: "/freeze unfreeze <player>"
+    reverse: null
+    description: "解冻玩家"
+  advancement:
+    format: "/advancement (grant|revoke) <targets> (everything|only <advancement> [<criterion>]|from|through|until <advancement>)"
+    reverse: null
+    description: "管理玩家进度"
+  attribute:
+    format: "/attribute <target> <attribute> (base get|base set <value>|modifier add <uuid> <name> <value> <operation>|modifier remove <uuid>|modifier value get <uuid>)"
+    reverse: null
+    description: "修改实体属性"
+  ban:
+    format: "/ban <targets> [<reason>]"
+    reverse: "/pardon <targets>"
+    description: "封禁玩家"
+  ban-ip:
+    format: "/ban-ip <address|target> [<reason>]"
+    reverse: "/pardon-ip <address>"
+    description: "封禁IP"
+  banlist:
+    format: "/banlist [ips|players]"
+    reverse: null
+    description: "列出封禁列表"
+  bossbar:
+    format: "/bossbar (add <id> <name>|get <id> (max|players|value|visible)|list|remove <id>|set <id> (color <color>|max <max>|name <name>|players [<targets>]|style <style>|value <value>|visible <visible>))"
+    reverse: null
+    description: "管理boss栏"
+  clear:
+    format: "/clear [<targets>] [<item>] [<maxCount>]"
+    reverse: null
+    description: "清除玩家物品"
+  clone:
+    format: "/clone <x1> <y1> <z1> <x2> <y2> <z2> <x> <y> <z> [maskMode] [cloneMode]"
+    reverse: null
+    description: "克隆区域"
+  damage:
+    format: "/damage <target> <amount> [<damageType>] [at <location>|by <entity> [from <cause>]]"
+    reverse: null
+    description: "对实体造成伤害"
+  data:
+    format: "/data (get|merge|modify|remove) <target> <path> [<value>|<source>]"
+    reverse: null
+    description: "操作实体数据"
+  datapack:
+    format: "/datapack (disable|enable <name>|list [available|enabled])"
+    reverse: null
+    description: "管理数据包"
+  debug:
+    format: "/debug (start|stop|report)"
+    reverse: null
+    description: "调试服务器"
+  defaultgamemode:
+    format: "/defaultgamemode <gamemode>"
+    reverse: null
+    description: "设置默认游戏模式"
+  deop:
+    format: "/deop <targets>"
+    reverse: "/op <targets>"
+    description: "移除OP权限"
+  difficulty:
+    format: "/difficulty [<difficulty>]"
+    reverse: null
+    description: "设置游戏难度"
+  effect:
+    format: "/effect (give <targets> <effect> [<seconds>] [<amplifier>] [<hideParticles>]|clear [<targets>] [<effect>])"
+    reverse: "/effect clear [<targets>] [<effect>]"
+    description: "应用或移除效果"
+  enchant:
+    format: "/enchant <targets> <enchantment> [<level>]"
+    reverse: null
+    description: "附魔物品"
+  execute:
+    format: "/execute (align|anchored|as|at|facing|if|in|on|positioned|rotated|run|store|unless) ..."
+    reverse: null
+    description: "执行复杂命令"
+  fill:
+    format: "/fill <x1> <y1> <z1> <x2> <y2> <z2> <block> [replace [<filter>]|destroy|hollow|keep|outline]"
+    reverse: null
+    description: "填充区域"
+  forceload:
+    format: "/forceload (add|remove|query) <x> <z> [<x2> <z2>]"
+    reverse: null
+    description: "强制加载区块"
+  function:
+    format: "/function <name>"
+    reverse: null
+    description: "运行函数"
+  gamemode:
+    format: "/gamemode <gamemode> [<targets>]"
+    reverse: null
+    description: "切换游戏模式"
+  gamerule:
+    format: "/gamerule <rule> [<value>]"
+    reverse: null
+    description: "设置游戏规则"
+  give:
+    format: "/give <targets> <item> [<count>]"
+    reverse: null
+    description: "给予物品"
+  help:
+    format: "/help [<command>]"
+    reverse: null
+    description: "显示帮助"
+  item:
+    format: "/item (modify|replace) <target> <slot> (with <item>|from <source> <sourceSlot>)"
+    reverse: null
+    description: "操作物品"
+  jfr:
+    format: "/jfr (start|stop)"
+    reverse: null
+    description: "性能分析"
+  kick:
+    format: "/kick <targets> [<reason>]"
+    reverse: null
+    description: "踢出玩家"
+  kill:
+    format: "/kill [<targets>]"
+    reverse: null
+    description: "杀死实体"
+  list:
+    format: "/list [uuids]"
+    reverse: null
+    description: "列出玩家"
+  locate:
+    format: "/locate (structure|biome|poi) <type>"
+    reverse: null
+    description: "定位目标"
+  loot:
+    format: "/loot (drop|give|insert|replace) ..."
+    reverse: null
+    description: "操作战利品"
+  me:
+    format: "/me <action>"
+    reverse: null
+    description: "动作消息"
+  msg:
+    format: "/msg <targets> <message>"
+    reverse: null
+    description: "私聊"
+  op:
+    format: "/op <targets>"
+    reverse: "/deop <targets>"
+    description: "赋予OP权限"
+  pardon:
+    format: "/pardon <targets>"
+    reverse: null
+    description: "解禁玩家"
+  pardon-ip:
+    format: "/pardon-ip <address>"
+    reverse: null
+    description: "解禁IP"
+  particle:
+    format: "/particle <name> <x> <y> <z> <dx> <dy> <dz> <speed> <count> [<mode>]"
+    reverse: null
+    description: "生成粒子"
+  place:
+    format: "/place (feature|jigsaw|structure|template) <type> <x> <y> <z> [<options>]"
+    reverse: null
+    description: "放置结构"
+  playsound:
+    format: "/playsound <sound> <source> <targets> [<x> <y> <z>] [<volume>] [<pitch>] [<minVolume>]"
+    reverse: null
+    description: "播放声音"
+  publish:
+    format: "/publish [<port>]"
+    reverse: null
+    description: "开放服务器"
+  recipe:
+    format: "/recipe (give|take) <targets> <recipe>"
+    reverse: null
+    description: "管理配方"
+  reload:
+    format: "/reload"
+    reverse: null
+    description: "重载服务器"
+  save-all:
+    format: "/save-all [flush]"
+    reverse: null
+    description: "保存所有"
+  save-off:
+    format: "/save-off"
+    reverse: "/save-on"
+    description: "关闭保存"
+  save-on:
+    format: "/save-on"
+    reverse: null
+    description: "开启保存"
+  say:
+    format: "/say <message>"
+    reverse: null
+    description: "广播消息"
+  schedule:
+    format: "/schedule (function|clear) <name> <time>"
+    reverse: null
+    description: "调度函数"
+  scoreboard:
+    format: "/scoreboard (objectives|players) ..."
+    reverse: null
+    description: "管理计分板"
+  seed:
+    format: "/seed"
+    reverse: null
+    description: "显示种子"
+  setblock:
+    format: "/setblock <x> <y> <z> <block> [<mode>]"
+    reverse: null
+    description: "设置方块"
+  setidletimeout:
+    format: "/setidletimeout <minutes>"
+    reverse: null
+    description: "设置空闲超时"
+  setworldspawn:
+    format: "/setworldspawn [<x> <y> <z>] [<angle>]"
+    reverse: null
+    description: "设置世界出生点"
+  spawnpoint:
+    format: "/spawnpoint [<targets>] [<x> <y> <z>] [<angle>]"
+    reverse: null
+    description: "设置出生点"
+  spectate:
+    format: "/spectate [<target>] [<player>]"
+    reverse: null
+    description: "旁观模式"
+  spreadplayers:
+    format: "/spreadplayers <x> <z> <spreadDistance> <maxRange> <respectTeams> <targets>"
+    reverse: null
+    description: "分散玩家"
+  stop:
+    format: "/stop"
+    reverse: null
+    description: "停止服务器"
+  stopsound:
+    format: "/stopsound <targets> [<source>] [<sound>]"
+    reverse: null
+    description: "停止声音"
+  summon:
+    format: "/summon <entity> [<x> <y> <z>] [<nbt>]"
+    reverse: null
+    description: "召唤实体"
+  tag:
+    format: "/tag <targets> (add|list|remove) <name>"
+    reverse: null
+    description: "管理标签"
+  team:
+    format: "/team (add|empty|join|leave|list|modify|remove) ..."
+    reverse: null
+    description: "管理队伍"
+  teammsg:
+    format: "/teammsg <message>"
+    reverse: null
+    description: "队伍消息"
+  teleport:
+    format: "/teleport (<targets> <destination>|facing <facing>|to <location>)"
+    reverse: "/teleport <targets> <original_x> <original_y> <original_z>"
+    description: "传送玩家"
+  tell:
+    format: "/tell <targets> <message>"
+    reverse: null
+    description: "私聊"
+  tellraw:
+    format: "/tellraw <targets> <message>"
+    reverse: null
+    description: "发送原始消息"
+  time:
+    format: "/time (add|query|set) <value>"
+    reverse: null
+    description: "设置时间"
+  title:
+    format: "/title <targets> (actionbar|clear|reset|subtitle|times|title) <value>"
+    reverse: null
+    description: "显示标题"
+  trigger:
+    format: "/trigger <objective> [<value>]"
+    reverse: null
+    description: "触发目标"
+  weather:
+    format: "/weather (clear|rain|thunder) [<duration>]"
+    reverse: null
+    description: "设置天气"
+  whitelist:
+    format: "/whitelist (add|list|off|on|reload|remove) <targets>"
+    reverse: null
+    description: "管理白名单"
+  worldborder:
+    format: "/worldborder (add|center|damage|get|set|warning) ..."
+    reverse: null
+    description: "管理世界边界"
