@@ -1,4 +1,5 @@
 package com.darkpixel.anticheat;
+
 import com.darkpixel.Global;
 import com.darkpixel.anticheat.detectors.*;
 import com.darkpixel.utils.FileUtil;
@@ -24,13 +25,12 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.potion.PotionEffect;
-import org.bukkit.potion.PotionEffectType;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.Vector;
 import java.io.File;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+
 public class AntiCheatHandler implements Listener, CommandExecutor {
     private final Global context;
     private final PlayerData playerData;
@@ -42,9 +42,15 @@ public class AntiCheatHandler implements Listener, CommandExecutor {
     private final Map<CheatType, Detector> detectors = new EnumMap<>(CheatType.class);
     private final double maxBps;
     private final Map<UUID, Map<String, Object>> packetCache = new ConcurrentHashMap<>();
+    // 存储异步线程收集的交互数据供主线程处理
+    private final Map<UUID, InteractData> interactData = new ConcurrentHashMap<>();
+
+    private final Map<UUID, Map<CheatType, Integer>> triggerCounts = new ConcurrentHashMap<>();
+
     public Global getContext() {
         return context;
     }
+
     public AntiCheatHandler(Global context) {
         this.context = context;
         this.playerData = context.getPlayerData();
@@ -58,7 +64,9 @@ public class AntiCheatHandler implements Listener, CommandExecutor {
         setupPacketListeners();
         startReportCheck();
         startBpsCheck();
+        startInteractCheck(); //新增主线程检查交互数据
     }
+
     private void loadConfig() {
         config = FileUtil.loadOrCreate(configFile, context.getPlugin(), "darkac.yml");
         config.addDefault("enabled", false);
@@ -69,9 +77,11 @@ public class AntiCheatHandler implements Listener, CommandExecutor {
         saveConfig();
         enabled = config.getBoolean("enabled", false);
     }
+
     private void saveConfig() {
         FileUtil.saveAsync(config, configFile, context.getPlugin());
     }
+
     private void initDetectors() {
         detectors.put(CheatType.FAST_HEAD_ROTATION, new HeadRotationDetector(config, this));
         detectors.put(CheatType.HIGH_CPS, new ClickSpeedDetector(config, this));
@@ -84,6 +94,7 @@ public class AntiCheatHandler implements Listener, CommandExecutor {
         detectors.put(CheatType.FLY_HACK, new FlyHackDetector(config, this));
         detectors.put(CheatType.SPEED_HACK, new SpeedHackDetector(config, this));
     }
+
     private void setupPacketListeners() {
         PacketEvents.getAPI().getEventManager().registerListener(new PacketListenerAbstract(PacketListenerPriority.HIGH) {
             @Override
@@ -93,31 +104,24 @@ public class AntiCheatHandler implements Listener, CommandExecutor {
                 UUID uuid = player.getUniqueId();
                 PlayerCheatData data = cheatData.computeIfAbsent(uuid, k -> new PlayerCheatData());
                 long now = System.currentTimeMillis();
-                data.incrementPacketCount((PacketTypeCommon) event.getPacketType()); 
+                data.incrementPacketCount((PacketTypeCommon) event.getPacketType());
                 data.packetTimestamps.add(now);
                 data.packetTimestamps.removeIf(t -> now - t > 5000);
                 if (!enabled) return;
+
                 if (event.getPacketType() == PacketType.Play.Client.PLAYER_POSITION) {
                     WrapperPlayClientPlayerPosition position = new WrapperPlayClientPlayerPosition(event);
                     Vector3d pos = position.getPosition();
-                    double x = pos.getX();
-                    double y = pos.getY();
-                    double z = pos.getZ();
-                    checkAllDetectors(player, data, now, x, y, z);
+                    checkAllDetectors(player, data, now, pos.getX(), pos.getY(), pos.getZ());
                 } else if (event.getPacketType() == PacketType.Play.Client.PLAYER_POSITION_AND_ROTATION) {
                     WrapperPlayClientPlayerPositionAndRotation posRot = new WrapperPlayClientPlayerPositionAndRotation(event);
                     Vector3d pos = posRot.getPosition();
-                    double x = pos.getX();
-                    double y = pos.getY();
-                    double z = pos.getZ();
-                    float yaw = posRot.getYaw();
-                    float pitch = posRot.getPitch();
-                    checkAllDetectors(player, data, now, x, y, z, yaw, pitch);
+                    checkAllDetectors(player, data, now, pos.getX(), pos.getY(), pos.getZ(), posRot.getYaw(), posRot.getPitch());
                 } else if (event.getPacketType() == PacketType.Play.Client.INTERACT_ENTITY) {
                     WrapperPlayClientInteractEntity interact = new WrapperPlayClientInteractEntity(event);
+                    //只在异步线程中收集数据不访问世界实体
+                    interactData.put(uuid, new InteractData(interact.getEntityId(), now));
                     detectors.get(CheatType.HIGH_CPS).check(player, data, now);
-                    detectors.get(CheatType.KILLAURA).check(player, data, now, getAngleDeviation(player, interact));
-                    detectors.get(CheatType.REACH).check(player, data, now, getReachDistance(player, interact));
                 }
                 if (data.totalPackets % 100 == 0) {
                     savePacketRecords(player, data);
@@ -125,6 +129,7 @@ public class AntiCheatHandler implements Listener, CommandExecutor {
             }
         });
     }
+
     private void checkAllDetectors(Player player, PlayerCheatData data, long now, double x, double y, double z, float... rotation) {
         detectors.get(CheatType.INVALID_MOVEMENT).check(player, data, now, x, y, z);
         detectors.get(CheatType.VERTICAL_TELEPORT).check(player, data, now, x, y, z);
@@ -135,30 +140,57 @@ public class AntiCheatHandler implements Listener, CommandExecutor {
             detectors.get(CheatType.FAST_HEAD_ROTATION).check(player, data, now, rotation[0], rotation[1]);
         }
     }
-    private double getAngleDeviation(Player player, WrapperPlayClientInteractEntity interact) {
-        int entityId = interact.getEntityId();
-        Entity target = player.getWorld().getEntities().stream()
+
+    // 在主线程中处理交互数据（Killaura和Reach检测）
+    private void startInteractCheck() {
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                if (!enabled) return;
+                for (Player player : Bukkit.getOnlinePlayers()) {
+                    UUID uuid = player.getUniqueId();
+                    InteractData data = interactData.remove(uuid);
+                    if (data == null) continue;
+
+                    PlayerCheatData cheat = cheatData.getOrDefault(uuid, new PlayerCheatData());
+                    long now = System.currentTimeMillis();
+                    Entity target = getEntityById(player, data.entityId);
+                    if (target != null) {
+                        double angleDeviation = getAngleDeviation(player, target);
+                        double reachDistance = getReachDistance(player, target);
+                        detectors.get(CheatType.KILLAURA).check(player, cheat, now, angleDeviation);
+                        detectors.get(CheatType.REACH).check(player, cheat, now, reachDistance);
+                    }
+                }
+            }
+        }.runTaskTimer(context.getPlugin(), 0L, 1L);
+    }
+
+    private Entity getEntityById(Player player, int entityId) {
+        return player.getWorld().getEntities().stream()
                 .filter(e -> e.getEntityId() == entityId)
                 .findFirst().orElse(null);
-        if (target == null) return 0.0;
+    }
+
+    private double getAngleDeviation(Player player, Entity target) {
         Location eyeLoc = player.getEyeLocation();
         Vector playerDir = eyeLoc.getDirection();
         Vector toTarget = target.getLocation().toVector().subtract(eyeLoc.toVector()).normalize();
-        return Math.toDegrees(Math.acos(playerDir.dot(toTarget)));
+        double dot = playerDir.dot(toTarget);
+        return Math.toDegrees(Math.acos(Math.min(Math.max(dot, -1.0), 1.0)));
     }
-    private double getReachDistance(Player player, WrapperPlayClientInteractEntity interact) {
-        int entityId = interact.getEntityId();
-        Entity target = player.getWorld().getEntities().stream()
-                .filter(e -> e.getEntityId() == entityId)
-                .findFirst().orElse(null);
-        return target != null ? player.getEyeLocation().distance(target.getLocation()) : 0.0;
+
+    private double getReachDistance(Player player, Entity target) {
+        return player.getEyeLocation().distance(target.getLocation());
     }
+
     private void savePacketRecords(Player player, PlayerCheatData data) {
         Map<String, Object> packetRecord = new HashMap<>();
         packetRecord.put("total_packets", data.totalPackets);
         packetRecord.put("bps_avg", data.getAverageBps());
         packetCache.put(player.getUniqueId(), packetRecord);
     }
+
     @EventHandler
     public void onPlayerMove(PlayerMoveEvent event) {
         if (!enabled) return;
@@ -167,12 +199,15 @@ public class AntiCheatHandler implements Listener, CommandExecutor {
         long now = System.currentTimeMillis();
         checkAllDetectors(player, data, now, event.getTo().getX(), event.getTo().getY(), event.getTo().getZ());
     }
+
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
         UUID uuid = event.getPlayer().getUniqueId();
         cheatData.remove(uuid);
         reports.remove(uuid);
+        interactData.remove(uuid);
     }
+
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!sender.hasPermission("darkpixel.admin")) {
@@ -216,6 +251,7 @@ public class AntiCheatHandler implements Listener, CommandExecutor {
         }
         return true;
     }
+
     private void startReportCheck() {
         new BukkitRunnable() {
             @Override
@@ -228,6 +264,7 @@ public class AntiCheatHandler implements Listener, CommandExecutor {
             }
         }.runTaskTimer(context.getPlugin(), 0L, 200L);
     }
+
     private void startBpsCheck() {
         new BukkitRunnable() {
             @Override
@@ -242,26 +279,59 @@ public class AntiCheatHandler implements Listener, CommandExecutor {
             }
         }.runTaskTimer(context.getPlugin(), 0L, 20L);
     }
+
+
     public void triggerAlert(Player player, CheatType type, String details) {
-        String alert = String.format("[DarkAC] %s triggered %s: %s", player.getName(), type.getName(), details);
-        if (enabled) {
-            Bukkit.getOnlinePlayers().stream()
-                    .filter(Player::isOp)
-                    .forEach(op -> op.sendMessage(alert));
+        UUID uuid = player.getUniqueId();
+        Map<CheatType, Integer> counts = triggerCounts.computeIfAbsent(uuid, k -> new HashMap<>());
+        int count = counts.getOrDefault(type, 0) + 1;
+        counts.put(type, count);
+        if (count >= 5) { // 每5次记录一次
+            String alert = String.format("[DarkAC] %s triggered %s: %s (x%d)", player.getName(), type.getName(), details, count);
+            Bukkit.getOnlinePlayers().stream().filter(Player::isOp).forEach(op -> op.sendMessage("§e" + alert));
             LogUtil.warning(alert);
+            saveCheatTrigger(player, type, details);
+            counts.put(type, 0); // 重置计数
         }
     }
+    private void saveCheatTrigger(Player player, CheatType type, String details) {
+        YamlConfiguration config = YamlConfiguration.loadConfiguration(configFile);
+        String path = player.getName() + ".cheatTriggers." + type.name();
+        List<Map<String, Object>> triggers = (List<Map<String, Object>>) config.getList(path, new ArrayList<>());
+        Map<String, Object> record = new HashMap<>();
+        record.put("speed", Double.parseDouble(details.split(": ")[1].replace(" blocks/s", "")));
+        record.put("time", System.currentTimeMillis());
+        triggers.add(record);
+        if (triggers.size() > 100) triggers.remove(0); // 限制最大100条
+        config.set(path, triggers);
+        saveConfig();
+    }
+
     public void addReport(Player target, Player reporter) {
         List<Report> reportList = reports.computeIfAbsent(target.getUniqueId(), k -> new ArrayList<>());
         reportList.add(new Report(reporter.getUniqueId(), System.currentTimeMillis()));
     }
+
+    //交互
+    static class InteractData {
+        final int entityId;
+        final long timestamp;
+
+        InteractData(int entityId, long timestamp) {
+            this.entityId = entityId;
+            this.timestamp = timestamp;
+        }
+    }
+
     static class Report {
         private final UUID reporter;
         private final long timestamp;
+
         Report(UUID reporter, long timestamp) {
             this.reporter = reporter;
             this.timestamp = timestamp;
         }
+
         public long getTimestamp() {
             return timestamp;
         }

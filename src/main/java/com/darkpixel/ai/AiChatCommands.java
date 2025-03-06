@@ -1,4 +1,5 @@
 package com.darkpixel.ai;
+
 import com.darkpixel.gui.DashboardHandler;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
@@ -9,13 +10,16 @@ import org.bukkit.entity.Player;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+
 public class AiChatCommands implements CommandExecutor, TabCompleter {
     private final AiChatHandler handler;
     private final DashboardHandler dashboardHandler;
+
     public AiChatCommands(AiChatHandler handler, DashboardHandler dashboardHandler) {
         this.handler = handler;
         this.dashboardHandler = dashboardHandler;
     }
+
     @Override
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
         if (!(sender instanceof Player p)) {
@@ -52,6 +56,7 @@ public class AiChatCommands implements CommandExecutor, TabCompleter {
                 return true;
         }
     }
+
     @Override
     public List<String> onTabComplete(CommandSender sender, Command cmd, String alias, String[] args) {
         List<String> suggestions = new ArrayList<>();
@@ -59,9 +64,7 @@ public class AiChatCommands implements CommandExecutor, TabCompleter {
         boolean isOp = sender.hasPermission("darkpixel.admin");
         if (args.length == 1) {
             suggestions.addAll(Arrays.asList("public", "private"));
-            if (isOp) {
-                suggestions.addAll(Arrays.asList("mode", "setmodel", "whitelist", "unwhitelist", "setlimit", "addlimit", "history", "adm"));
-            }
+            if (isOp) suggestions.addAll(Arrays.asList("mode", "setmodel", "whitelist", "unwhitelist", "setlimit", "addlimit", "history", "adm"));
         } else if (args.length == 2 && isOp) {
             String subCommand = args[0].toLowerCase();
             if (subCommand.equals("mode") || subCommand.equals("setmodel")) {

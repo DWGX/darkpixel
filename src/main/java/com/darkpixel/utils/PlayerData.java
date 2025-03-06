@@ -1,4 +1,5 @@
 package com.darkpixel.utils;
+
 import com.darkpixel.Global;
 import org.bukkit.Location;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -9,24 +10,21 @@ import java.io.File;
 import java.io.IOException;
 import java.util.*;
 import java.util.stream.Collectors;
+
 public class PlayerData {
     private final Map<String, PlayerInfo> playerData = new HashMap<>();
     private final File file;
     private YamlConfiguration config;
     private final Global context;
+
     public PlayerData(Global context) {
         this.context = context;
         file = new File(context.getPlugin().getDataFolder(), "player.yml");
-        if (!file.exists()) {
-            try {
-                file.createNewFile();
-            } catch (IOException e) {
-                LogUtil.severe("创建 player.yml 失败: " + e.getMessage());
-            }
-        }
-        config = YamlConfiguration.loadConfiguration(file);
+        config = FileUtil.loadOrCreate(file, context.getPlugin(), "player.yml");
+        //Use updated method
         loadData();
     }
+
     private void loadData() {
         for (String key : config.getKeys(false)) {
             int loginCount = config.getInt(key + ".loginCount", 0);
@@ -40,6 +38,7 @@ public class PlayerData {
             playerData.put(key, info);
         }
     }
+
     public void updatePlayer(Player player) {
         String name = player.getName();
         PlayerInfo info = playerData.getOrDefault(name, new PlayerInfo(0, player.getLocation()));
@@ -52,9 +51,11 @@ public class PlayerData {
         playerData.put(name, info);
         saveDataAsync();
     }
+
     public PlayerInfo getPlayerInfo(String name) {
         return playerData.getOrDefault(name, new PlayerInfo(0, null));
     }
+
     private void saveDataAsync() {
         for (Map.Entry<String, PlayerInfo> entry : playerData.entrySet()) {
             String name = entry.getKey();
@@ -68,6 +69,7 @@ public class PlayerData {
         }
         FileUtil.saveAsync(config, file, context.getPlugin());
     }
+
     public static class PlayerInfo {
         public int loginCount;
         public Location location;
@@ -75,7 +77,8 @@ public class PlayerData {
         public int foodLevel;
         public ItemStack[] inventoryContents;
         public Collection<PotionEffect> effects;
-        public List<String> cheatTriggers; 
+        public List<String> cheatTriggers;
+
         public PlayerInfo(int loginCount, Location location) {
             this.loginCount = loginCount;
             this.location = location;
@@ -85,6 +88,7 @@ public class PlayerData {
             this.effects = new ArrayList<>();
             this.cheatTriggers = new ArrayList<>();
         }
+
         public String getInventoryDescription() {
             if (inventoryContents == null) return "背包为空";
             StringBuilder desc = new StringBuilder();
@@ -99,16 +103,19 @@ public class PlayerData {
             }
             return desc.length() > 0 ? desc.substring(0, desc.length() - 2) : "背包为空";
         }
+
         public String getEffectsDescription() {
             if (effects == null || effects.isEmpty()) return "无效果";
             return effects.stream()
                     .map(e -> e.getType().getName() + " (等级 " + (e.getAmplifier() + 1) + ", " + e.getDuration() / 20 + "秒)")
                     .collect(Collectors.joining(", "));
         }
+
         public String getCheatTriggersDescription() {
             return cheatTriggers.isEmpty() ? "No cheat triggers recorded" : String.join("\n", cheatTriggers);
         }
     }
+
     public String analyzePlayer(Player player) {
         PlayerInfo info = getPlayerInfo(player.getName());
         return "玩家状态: " + info.health + "生命, " + info.foodLevel + "饥饿值 | 背包: " + info.getInventoryDescription() +

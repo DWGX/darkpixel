@@ -1,4 +1,5 @@
 package com.darkpixel.ai;
+
 import com.darkpixel.Global;
 import com.darkpixel.manager.ConfigManager;
 import com.darkpixel.utils.LogUtil;
@@ -13,19 +14,21 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
+
 public class AiChatHandlerImpl implements AiChatHandler {
     private final ConfigManager config;
     private final ApiClient api;
     final AiChatConfig chatConfig;
     final AiChatHistory chatHistory;
     private final Global context;
-    private String aiName; 
+    private String aiName;
     private final Map<String, String> playerModels = new ConcurrentHashMap<>();
     private final Map<String, Long> lastRequestTime = new ConcurrentHashMap<>();
     private final ReentrantLock lock = new ReentrantLock();
-    private List<String> COMMAND_WHITELIST; 
-    private Map<String, String> commandCache; 
+    private List<String> COMMAND_WHITELIST;
+    private Map<String, String> commandCache;
     private final Map<String, String> intentCache;
+
     public AiChatHandlerImpl(ConfigManager config, Global context) {
         this.config = config;
         this.context = context;
@@ -38,6 +41,7 @@ public class AiChatHandlerImpl implements AiChatHandler {
         this.intentCache = new ConcurrentHashMap<>();
         startMessageReset();
     }
+
     public void reloadConfig() {
         this.aiName = config.getAiName();
         this.COMMAND_WHITELIST = config.getConfig().getStringList("command_whitelist");
@@ -46,13 +50,11 @@ public class AiChatHandlerImpl implements AiChatHandler {
         chatHistory.loadChatHistoryAsync();
         LogUtil.info("AI Chat 配置已重新加载");
     }
+
     private Map<String, String> buildCommandCache() {
         Map<String, String> cache = new HashMap<>();
         YamlConfiguration cmdConfig = context.getCommandConfig();
-        if (cmdConfig == null || !cmdConfig.contains("commands")) {
-            LogUtil.warning("commands.yml 未正确加载或为空！");
-            return cache;
-        }
+        if (cmdConfig == null || !cmdConfig.contains("commands")) return cache;
         cmdConfig.getConfigurationSection("commands").getKeys(false).forEach(key -> {
             String format = cmdConfig.getString("commands." + key + ".format");
             String desc = cmdConfig.getString("commands." + key + ".description");
@@ -60,40 +62,14 @@ public class AiChatHandlerImpl implements AiChatHandler {
         });
         return cache;
     }
-    private String parseIntent(String message) {
-        String lowerMsg = message.toLowerCase();
-        if (intentCache.containsKey(lowerMsg)) return intentCache.get(lowerMsg);
-        if (Pattern.compile("给.*(物资|木头|食物|工具)").matcher(lowerMsg).find()) return cacheIntent(lowerMsg, "give");
-        if (Pattern.compile("造|建|房子|别墅|塔").matcher(lowerMsg).find()) return cacheIntent(lowerMsg, "build");
-        if (Pattern.compile("冻结|定住|锁住").matcher(lowerMsg).find()) return cacheIntent(lowerMsg, "freeze");
-        if (Pattern.compile("垃圾|不好|重做").matcher(lowerMsg).find()) return cacheIntent(lowerMsg, "redo");
-        return cacheIntent(lowerMsg, "unknown");
-    }
+
+
     private String cacheIntent(String message, String intent) {
         intentCache.put(message, intent);
         return intent;
     }
-    private String getRelevantCommands(String message) {
-        String intent = parseIntent(message);
-        StringBuilder relevantCmds = new StringBuilder();
-        switch (intent) {
-            case "give":
-                relevantCmds.append(commandCache.get("give")).append("\n");
-                break;
-            case "build":
-                relevantCmds.append(commandCache.get("fill")).append("\n")
-                        .append(commandCache.get("setblock")).append("\n");
-                break;
-            case "freeze":
-                relevantCmds.append(commandCache.get("freeze")).append("\n");
-                break;
-            default:
-                commandCache.forEach((cmd, desc) -> {
-                    if (message.toLowerCase().contains(cmd)) relevantCmds.append(desc).append("\n");
-                });
-        }
-        return relevantCmds.length() > 0 ? relevantCmds.toString() : "未找到相关命令";
-    }
+
+
     private String getHistorySummary(String player) {
         List<String> history = chatHistory.getPlayerHistory(player);
         if (history.isEmpty()) return "无历史记录";
@@ -105,6 +81,7 @@ public class AiChatHandlerImpl implements AiChatHandler {
         }
         return summary.toString();
     }
+
     @Override
     public void init(ConfigManager config) {
         Global.executor.submit(() -> {
@@ -112,10 +89,12 @@ public class AiChatHandlerImpl implements AiChatHandler {
             chatHistory.loadChatHistoryAsync();
         });
     }
+
     @Override
     public String getPlayerModel(String player) {
         return playerModels.getOrDefault(player, "deepseek-chat");
     }
+
     @Override
     public void setPlayerModel(String player, String model) {
         if (config.getAvailableModels().contains(model)) {
@@ -123,14 +102,17 @@ public class AiChatHandlerImpl implements AiChatHandler {
             LogUtil.info("玩家 " + player + " 的AI模型切换为: " + model);
         }
     }
+
     @Override
     public boolean canSendMessage(String player, boolean isOp) {
         return chatConfig.canSendMessage(player, isOp);
     }
+
     @Override
     public void sendMessage(Player player, String message, boolean isPublic) {
         sendMessage(player, message, isPublic, null);
     }
+
     @Override
     public void sendMessage(Player player, String message, boolean isPublic, Consumer<String> callback) {
         String name = player.getName();
@@ -148,20 +130,24 @@ public class AiChatHandlerImpl implements AiChatHandler {
         }
         lastRequestTime.put(name, System.currentTimeMillis());
         PlayerData.PlayerInfo playerInfo = context.getPlayerData().getPlayerInfo(name);
+        String prompt = buildPromptForPlayer(player, message, playerInfo);
+        executeChatRequest(player, prompt, message, isPublic, callback);
+    }
+
+    private String buildPromptForPlayer(Player player, String message, PlayerData.PlayerInfo playerInfo) {
         String playerContext = buildPlayerContext(player, playerInfo);
         String inventory = playerInfo.getInventoryDescription();
         String effects = playerInfo.getEffectsDescription();
         String worldResources = context.getWorldData().analyzeWorld(player.getWorld());
-        chatHistory.addMessage(name, "用户: " + message);
-        String prompt = buildPrompt(name, message, playerContext, inventory, effects, worldResources, false);
-        executeChatRequest(player, prompt, message, isPublic, callback);
+        chatHistory.addMessage(player.getName(), "用户: " + message);
+        return buildPrompt(player.getName(), message, playerContext, inventory, effects, worldResources, false);
     }
+
     @Override
     public void sendAdminBroadcast(Player player, String message) {
         String name = player.getName();
         if (!player.hasPermission("darkpixel.admin")) {
-            Bukkit.getScheduler().runTask(config.getPlugin(), () ->
-                    player.sendMessage("§c只有管理员可以使用 /aichat adm 命令！"));
+            Bukkit.getScheduler().runTask(config.getPlugin(), () -> player.sendMessage("§c只有管理员可以使用 /aichat adm 命令！"));
             return;
         }
         lock.lock();
@@ -173,52 +159,39 @@ public class AiChatHandlerImpl implements AiChatHandler {
             String effects = playerInfo.getEffectsDescription();
             String worldResources = context.getWorldData().analyzeWorld(player.getWorld());
             String prompt = buildPrompt(name, message, playerContext, inventory, effects, worldResources, true);
-            LogUtil.info("发送给 API 的完整提示词: " + prompt);
             executeAdminRequest(player, prompt, message);
         } finally {
             lock.unlock();
         }
     }
+
     @Override
     public void setPlayerMessageLimit(String player, int limit) {
         chatConfig.setPlayerMessageLimit(player, limit);
         LogUtil.info("设置玩家 " + player + " 的消息上限为: " + limit);
     }
+
     @Override
     public int getPlayerMessageLimit(String player) {
         return chatConfig.getPlayerMessageLimit(player);
     }
+
     @Override
     public void handleAdminCommand(Player player, String subCommand, String message) {
         boolean isOp = player.hasPermission("darkpixel.admin");
         String[] args = message.split(" ");
         String name = player.getName();
         if (!isOp) {
-            Bukkit.getScheduler().runTask(config.getPlugin(), () ->
-                    player.sendMessage("§c无权限，请联系管理员！"));
+            Bukkit.getScheduler().runTask(config.getPlugin(), () -> player.sendMessage("§c无权限，请联系管理员！"));
             return;
         }
         switch (subCommand) {
-            case "mode":
-                if (args.length == 1) setPlayerModel(name, args[0]);
-                break;
-            case "setmodel":
-                if (args.length == 2) setPlayerModel(args[0], args[1]);
-                break;
-            case "whitelist":
-                if (args.length == 1) chatConfig.getWhitelist().add(args[0]);
-                break;
-            case "unwhitelist":
-                if (args.length == 1) chatConfig.getWhitelist().remove(args[0]);
-                break;
-            case "setlimit":
-                if (args.length == 2) setPlayerMessageLimit(args[0], Integer.parseInt(args[1]));
-                break;
-            case "addlimit":
-                if (args.length == 2 && args[0].equalsIgnoreCase("dashboard")) {
-                    context.getDashboard().addDashboardChatLimit(Integer.parseInt(args[1]));
-                }
-                break;
+            case "mode": if (args.length == 1) setPlayerModel(name, args[0]); break;
+            case "setmodel": if (args.length == 2) setPlayerModel(args[0], args[1]); break;
+            case "whitelist": if (args.length == 1) chatConfig.getWhitelist().add(args[0]); break;
+            case "unwhitelist": if (args.length == 1) chatConfig.getWhitelist().remove(args[0]); break;
+            case "setlimit": if (args.length == 2) setPlayerMessageLimit(args[0], Integer.parseInt(args[1])); break;
+            case "addlimit": if (args.length == 2 && args[0].equalsIgnoreCase("dashboard")) context.getDashboard().addDashboardChatLimit(Integer.parseInt(args[1])); break;
             case "history":
                 if (args.length == 2) {
                     String action = args[0].toLowerCase();
@@ -230,45 +203,34 @@ public class AiChatHandlerImpl implements AiChatHandler {
                     }
                 }
                 break;
-            case "adm":
-                sendAdminBroadcast(player, message);
-                break;
-            default:
-                Bukkit.getScheduler().runTask(config.getPlugin(), () ->
-                        player.sendMessage("§c未知的管理命令"));
+            case "adm": sendAdminBroadcast(player, message); break;
+            default: Bukkit.getScheduler().runTask(config.getPlugin(), () -> player.sendMessage("§c未知的管理命令"));
         }
     }
+
     private boolean isRateLimited(String name) {
         Long lastTime = lastRequestTime.get(name);
         return lastTime != null && (System.currentTimeMillis() - lastTime) < 1000;
     }
+
     private String buildPlayerContext(Player player, PlayerData.PlayerInfo info) {
-        StringBuilder context = new StringBuilder();
-        context.append("玩家名: ").append(player.getName())
-                .append(", 位置: ").append(player.getLocation().getBlockX()).append(",")
-                .append(player.getLocation().getBlockY()).append(",")
-                .append(player.getLocation().getBlockZ())
-                .append(", 世界: ").append(player.getWorld().getName())
-                .append(", 登录次数: ").append(info != null ? info.loginCount : 0)
-                .append(", 生命值: ").append(player.getHealth())
-                .append(", 饥饿值: ").append(player.getFoodLevel())
-                .append(", 是否飞行: ").append(player.isFlying() ? "是" : "否");
-        return context.toString();
+        return "玩家名: " + player.getName() + ", 位置: " + player.getLocation().getBlockX() + "," +
+                player.getLocation().getBlockY() + "," + player.getLocation().getBlockZ() + ", 世界: " +
+                player.getWorld().getName() + ", 登录次数: " + (info != null ? info.loginCount : 0) +
+                ", 生命值: " + player.getHealth() + ", 饥饿值: " + player.getFoodLevel() +
+                ", 是否飞行: " + (player.isFlying() ? "是" : "否");
     }
+
     private void executeAdminRequest(Player player, String prompt, String originalMessage) {
         String name = player.getName();
         Global.executor.submit(() -> {
             try {
                 api.chatCompletionAsync(prompt, "deepseek-reasoner", 2000).thenAccept(resp -> {
-                    String finalResp = resp;
-                    if (finalResp == null || finalResp.trim().isEmpty() || !finalResp.startsWith("/")) {
-                        finalResp = generateCreativeResponse(player, originalMessage);
-                    }
-                    String finalResp1 = finalResp;
+                    String finalResp = resp != null && !resp.trim().isEmpty() && resp.startsWith("/") ? resp : generateCreativeResponse(player, originalMessage);
                     Bukkit.getScheduler().runTask(config.getPlugin(), () -> {
-                        chatHistory.addMessage(name, aiName + ": " + finalResp1);
+                        chatHistory.addMessage(name, aiName + ": " + finalResp);
                         Bukkit.broadcastMessage("§c[AI管理员广播] " + name + ": " + originalMessage);
-                        executeCommands(finalResp1, name, player);
+                        executeCommands(finalResp, name, player);
                     });
                 }).exceptionally(throwable -> {
                     String fallbackResp = "/say " + aiName + " 请求失败 AI: 出错了，稍后再试吧！";
@@ -291,6 +253,7 @@ public class AiChatHandlerImpl implements AiChatHandler {
             }
         });
     }
+
     private String generateCreativeResponse(Player player, String originalMessage) {
         String name = player.getName();
         PlayerData.PlayerInfo playerInfo = context.getPlayerData().getPlayerInfo(name);
@@ -307,8 +270,7 @@ public class AiChatHandlerImpl implements AiChatHandler {
                 "世界资源: " + (worldResources != null ? worldResources : "世界资源未知") + "\n" +
                 "当前输入: " + (originalMessage.isEmpty() ? "玩家未提供具体要求，请自由发挥" : originalMessage);
         try {
-            CompletableFuture<String> future = api.chatCompletionAsync(enhancedPrompt, "deepseek-reasoner", 2000);
-            String result = future.join();
+            String result = api.chatCompletionAsync(enhancedPrompt, "deepseek-reasoner", 2000).join();
             if (result == null || result.trim().isEmpty() || !result.startsWith("/")) {
                 Random rand = new Random();
                 if (originalMessage.isEmpty() || originalMessage.length() < 5) {
@@ -328,15 +290,14 @@ public class AiChatHandlerImpl implements AiChatHandler {
             return "/give " + name + " minecraft:apple 1\nAI: 出错了，给你个苹果安慰一下！";
         }
     }
+
     private String buildPrompt(String name, String message, String playerContext, String inventory, String effects, String worldResources, boolean isAdmin) {
         String rawPrompt = config.getConfig().getString(isAdmin ? "ai_admin_prompt" : "ai_public_prompt", "默认提示未定义");
-        String relevantCommands = isAdmin ? getRelevantCommands(message) : "";
         String historySummary = getHistorySummary(name);
         if (isAdmin) {
-            rawPrompt = "你是一个Minecraft 1.21.4服务器AI助手，名字叫“" + aiName + "”。根据玩家输入和上下文，生成Minecraft命令（每行以 / 开头，多行以 \\n 分隔，最后附 'AI: <简短回复>'）。必须始终返回命令形式，即使输入模糊或无具体要求，也要生成简单或高级的内容（例如 /give 物品 或复杂建筑命令）。可以自由发挥，生成实用、有趣或高级的内容，如建筑、红石装置或随机事件。参考相关命令但不拘泥于模板。\n" +
+            rawPrompt = "你是一个Minecraft 1.21.4服务器AI助手，名字叫“" + aiName + "”。根据玩家输入和上下文，生成Minecraft命令（每行以 / 开头，多行以 \\n 分隔，最后附 'AI: <简短回复>'）。可以自由发挥，生成实用、有趣或高级的内容，如建筑、红石装置或随机事件。参考相关命令但不拘泥于模板。\n" +
                     "玩家状态: " + (playerContext != null ? playerContext : "未知玩家状态") + "\n" +
                     "历史摘要: " + historySummary + "\n" +
-                    "相关命令参考（仅供灵感，不强制使用）: " + relevantCommands + "\n" +
                     "背包: " + (inventory != null ? inventory : "背包未知") + "\n" +
                     "效果: " + (effects != null ? effects : "无效果") + "\n" +
                     "世界资源: " + (worldResources != null ? worldResources : "世界资源未知") + "\n" +
@@ -346,7 +307,6 @@ public class AiChatHandlerImpl implements AiChatHandler {
                     .replace("{ai_name}", aiName)
                     .replace("{player_context}", playerContext != null ? playerContext : "未知玩家状态")
                     .replace("{history}", historySummary)
-                    .replace("{commands}", relevantCommands)
                     .replace("{inventory}", inventory != null ? inventory : "背包未知")
                     .replace("{effects}", effects != null ? effects : "无效果")
                     .replace("{world_resources}", worldResources != null ? worldResources : "世界资源未知")
@@ -354,15 +314,13 @@ public class AiChatHandlerImpl implements AiChatHandler {
         }
         return rawPrompt;
     }
+
     private void executeChatRequest(Player player, String prompt, String originalMessage, boolean isPublic, Consumer<String> callback) {
         String name = player.getName();
         Global.executor.submit(() -> {
             try {
                 api.chatCompletionAsync(prompt, getPlayerModel(name), 2000).thenAccept(resp -> {
-                    if (resp == null || resp.trim().isEmpty()) {
-                        resp = "§b" + aiName + ": 我不太明白你在说什么，能再解释一下吗？";
-                    }
-                    String finalResp = resp;
+                    String finalResp = (resp == null || resp.trim().isEmpty()) ? "§b" + aiName + ": 我不太明白你在说什么，能再解释一下吗？" : resp;
                     Bukkit.getScheduler().runTask(config.getPlugin(), () -> {
                         chatHistory.addMessage(name, aiName + ": " + finalResp);
                         if (isPublic) {
@@ -376,25 +334,22 @@ public class AiChatHandlerImpl implements AiChatHandler {
                         chatConfig.incrementMessageCount(name);
                     });
                 }).exceptionally(throwable -> {
-                    String errorMsg = "§cAI 请求失败，请稍后再试！";
-                    Bukkit.getScheduler().runTask(config.getPlugin(), () -> player.sendMessage(errorMsg));
+                    Bukkit.getScheduler().runTask(config.getPlugin(), () -> player.sendMessage("§cAI 请求失败，请稍后再试！"));
                     LogUtil.severe("AI 请求异常: " + throwable.getMessage());
                     return null;
                 });
             } catch (Exception e) {
-                String errorMsg = "§cAI 处理失败，请联系管理员！";
-                Bukkit.getScheduler().runTask(config.getPlugin(), () -> player.sendMessage(errorMsg));
+                Bukkit.getScheduler().runTask(config.getPlugin(), () -> player.sendMessage("§cAI 处理失败，请联系管理员！"));
                 LogUtil.severe("AI 请求处理失败: " + e.getMessage());
             }
         });
     }
+
     private void executeCommands(String response, String playerName, Player player) {
         String[] commands = response.split("\n");
         for (int i = 0; i < commands.length; i++) {
             String command = commands[i].trim();
-            if (!command.startsWith("/")) {
-                command = "/say " + command; 
-            }
+            if (!command.startsWith("/")) command = "/say " + command;
             String[] parts = command.split(" AI: ");
             String cmd = parts[0];
             String reply = parts.length > 1 ? parts[1] : "操作完成";
@@ -412,6 +367,7 @@ public class AiChatHandlerImpl implements AiChatHandler {
             }.runTaskLater(config.getPlugin(), i * 5L);
         }
     }
+
     private void startMessageReset() {
         long resetInterval = config.getConfig().getLong("message_reset_interval", 72000L);
         new BukkitRunnable() {
