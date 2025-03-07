@@ -4,7 +4,6 @@ import com.darkpixel.Global;
 import com.darkpixel.manager.ConfigManager;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -66,7 +65,7 @@ public class ApiClient {
                         case 503:
                             context.getPlugin().getLogger().warning("API temporary unavailable (503), retrying... Attempt " + (retry + 1));
                             try {
-                                Thread.sleep(2000 * (retry + 1)); // 增加重试间隔
+                                Thread.sleep(2000 * (retry + 1));
                             } catch (InterruptedException ie) {
                                 return "§c重试中断，请稍后再试！";
                             }

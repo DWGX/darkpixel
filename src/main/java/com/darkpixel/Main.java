@@ -1,17 +1,21 @@
 package com.darkpixel;
+
 import com.darkpixel.utils.LogUtil;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.plugin.java.JavaPlugin;
 import java.util.concurrent.TimeUnit;
+
 public final class Main extends JavaPlugin {
     private Global context;
+
     @Override
     public void onEnable() {
-        LogUtil.init(this); 
+        LogUtil.init(this);
         context = new Global(this);
         getLogger().info("DarkPixel 已启动");
     }
+
     @Override
     public void onDisable() {
         Global.executor.shutdown();
@@ -27,6 +31,7 @@ public final class Main extends JavaPlugin {
         }
         getLogger().info("DarkPixel 已关闭");
     }
+
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (command.getName().equalsIgnoreCase("reloadconfig")) {
@@ -34,12 +39,13 @@ public final class Main extends JavaPlugin {
                 sender.sendMessage("§c你没有权限执行此命令！");
                 return true;
             }
-            context.getConfigManager().reloadAllConfigs(); 
+            context.getConfigManager().reloadAllConfigs();
             sender.sendMessage("§a所有配置文件已重新加载！");
             return true;
         }
         return false;
     }
+
     public Global getContext() {
         return context;
     }

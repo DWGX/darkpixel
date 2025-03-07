@@ -1,4 +1,5 @@
 package com.darkpixel;
+
 import com.darkpixel.ai.AiChatEvents;
 import com.darkpixel.ai.AiChatHandler;
 import com.darkpixel.ai.AiChatHandlerImpl;
@@ -12,6 +13,7 @@ import com.darkpixel.npc.NpcHandler;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 import java.util.concurrent.*;
+
 public class Global {
     private final JavaPlugin plugin;
     private final ConfigManager configManager;
@@ -35,6 +37,7 @@ public class Global {
             new LinkedBlockingQueue<>(100),
             new ThreadPoolExecutor.CallerRunsPolicy()
     );
+
     public Global(JavaPlugin plugin) {
         this.plugin = plugin;
         this.configManager = new ConfigManager(plugin);
@@ -55,25 +58,32 @@ public class Global {
         registerEvents();
         configManager.reloadAllConfigs();
     }
+
     private AiChatHandler initAiChat() {
         return new AiChatHandlerImpl(configManager, this);
     }
+
     private BringBackBlocking initBringBackBlocking() {
         return configManager.getConfig().getBoolean("blocking.enabled", true) ? new BringBackBlocking(this) : null;
     }
+
     private DashboardHandler initDashboard() {
         return configManager.getConfig().getBoolean("dashboard_enabled", true) ?
                 new DashboardHandler(plugin, aiChat, configManager, this) : null;
     }
+
     private NpcHandler initNpcHandler() {
         return configManager.getConfig().getBoolean("npc_enabled", true) ? new NpcHandler(configManager, dashboard) : null;
     }
+
     private PlayerFreeze initPlayerFreeze() {
         return configManager.getConfig().getBoolean("freeze.enabled", true) ? new PlayerFreeze(this) : null;
     }
+
     private SitUtils initSitUtils() {
         return configManager.getConfig().getBoolean("sitting.enabled", true) ? new SitUtils(this) : null;
     }
+
     private void registerEvents() {
         if (bringBackBlocking != null) plugin.getServer().getPluginManager().registerEvents(bringBackBlocking, plugin);
         plugin.getServer().getPluginManager().registerEvents(new AiChatEvents(aiChat), plugin);
@@ -85,6 +95,7 @@ public class Global {
         if (sitUtils != null) plugin.getServer().getPluginManager().registerEvents(sitUtils, plugin);
         plugin.getServer().getPluginManager().registerEvents(antiCheatHandler, plugin);
     }
+
     public JavaPlugin getPlugin() { return plugin; }
     public ConfigManager getConfigManager() { return configManager; }
     public YamlConfiguration getConfig() { return configManager.getConfig(); }

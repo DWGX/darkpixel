@@ -63,12 +63,10 @@ public class AiChatHandlerImpl implements AiChatHandler {
         return cache;
     }
 
-
     private String cacheIntent(String message, String intent) {
         intentCache.put(message, intent);
         return intent;
     }
-
 
     private String getHistorySummary(String player) {
         List<String> history = chatHistory.getPlayerHistory(player);

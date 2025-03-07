@@ -1,4 +1,5 @@
 package com.darkpixel.anticheat;
+
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -8,14 +9,17 @@ import org.bukkit.scheduler.BukkitRunnable;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+
 public class ReportCommand implements CommandExecutor {
     private final AntiCheatHandler handler;
     private final Map<UUID, Long> cooldowns = new HashMap<>();
     private static final long COOLDOWN_TIME = 30000L;
+
     public ReportCommand(AntiCheatHandler handler) {
         this.handler = handler;
         startCooldownCleanup();
     }
+
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!(sender instanceof Player player)) {
@@ -48,6 +52,7 @@ public class ReportCommand implements CommandExecutor {
         notifyAdmins(player, target);
         return true;
     }
+
     private void notifyAdmins(Player reporter, Player target) {
         new BukkitRunnable() {
             @Override
@@ -58,8 +63,9 @@ public class ReportCommand implements CommandExecutor {
                     }
                 }
             }
-        }.runTaskAsynchronously(handler.getContext().getPlugin()); 
+        }.runTaskAsynchronously(handler.getContext().getPlugin());
     }
+
     private void startCooldownCleanup() {
         new BukkitRunnable() {
             @Override
@@ -67,6 +73,6 @@ public class ReportCommand implements CommandExecutor {
                 long now = System.currentTimeMillis();
                 cooldowns.entrySet().removeIf(entry -> (now - entry.getValue()) >= COOLDOWN_TIME);
             }
-        }.runTaskTimer(handler.getContext().getPlugin(), 0L, 600L); 
+        }.runTaskTimer(handler.getContext().getPlugin(), 0L, 600L);
     }
 }

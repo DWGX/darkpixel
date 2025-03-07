@@ -1,6 +1,10 @@
 enabled: false
 report_threshold: 2
 report_window_ms: 300000
+alert_prefs: {}
+packet_records: {}
+cheat_records: {}
+ai_reviews: {}
 detectors:
   head_rotation:
     max_speed: 50.0
@@ -20,13 +24,10 @@ detectors:
   reach:
     max_reach_distance: 4.5
   auto_clicker:
-    max_cps: 20.0          # 最大 CPS
-    min_variance: 5.0      # 最小点击间隔方差
+    max_cps: 20.0
+    min_variance: 5.0
   fly_hack:
-    max_air_time: 5000     # 最大空中时间（毫秒）
-    max_vertical_speed: 1.0 # 最大垂直速度
+    max_air_time: 5000
+    max_vertical_speed: 1.0
   speed_hack:
-    max_speed: 0.8         # 最大水平速度（基础值）
-packet_records: {}
-cheat_records: {}
-ai_reviews: {}
+    max_speed: 0.8
