@@ -1,7 +1,8 @@
 package com.darkpixel.manager;
+
 import com.darkpixel.Global;
 import com.darkpixel.ai.AiChatCommands;
-import com.darkpixel.combat.bringBackBlocking.GiveBlockableSword; 
+import com.darkpixel.combat.bringBackBlocking.GiveBlockableSword;
 import com.darkpixel.npc.NpcHandler;
 import com.darkpixel.utils.PingUtils;
 import org.bukkit.Bukkit;
@@ -12,12 +13,14 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
+
 public class CommandManager implements CommandExecutor {
     private final Global context;
-    private final GiveBlockableSword giveBlockableSword; 
+    private final GiveBlockableSword giveBlockableSword;
+
     public CommandManager(Global context) {
         this.context = context;
-        this.giveBlockableSword = new GiveBlockableSword(); 
+        this.giveBlockableSword = new GiveBlockableSword();
         JavaPlugin plugin = context.getPlugin();
         plugin.getCommand("aichat").setExecutor(new AiChatCommands(context.getAiChat(), context.getDashboard()));
         plugin.getCommand("giveblockablesword").setExecutor(this);
@@ -31,6 +34,7 @@ public class CommandManager implements CommandExecutor {
         plugin.getCommand("togglesit").setExecutor(this);
         plugin.getCommand("ping").setExecutor(this);
     }
+
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         switch (command.getName().toLowerCase()) {
@@ -48,6 +52,7 @@ public class CommandManager implements CommandExecutor {
                 boolean enabled = !context.getConfigManager().getConfig("config.yml").getBoolean("sitting.enabled", true);
                 context.getConfigManager().getConfig("config.yml").set("sitting.enabled", enabled);
                 context.getConfigManager().saveConfig("config.yml");
+                context.updateSitUtils();
                 sender.sendMessage("§a坐下功能已" + (enabled ? "开启" : "关闭"));
                 return true;
             case "sit":
@@ -55,10 +60,14 @@ public class CommandManager implements CommandExecutor {
                     sender.sendMessage("§c仅玩家可用！");
                     return true;
                 }
+                if (!context.getConfigManager().isSittingEnabled()) {
+                    sender.sendMessage("§c坐下功能当前已被禁用！");
+                    return true;
+                }
                 if (args.length == 0) {
                     Block blockBelow = player.getLocation().subtract(0, 1, 0).getBlock();
                     if (blockBelow.getType() != Material.AIR) {
-                        context.getSitUtils().sitDown(player, blockBelow, true);
+                        context.getSitUtils().sitDown(player, blockBelow, false);
                         sender.sendMessage("§a你已坐下！");
                     } else {
                         sender.sendMessage("§c请站在一个方块上！");
@@ -74,6 +83,7 @@ public class CommandManager implements CommandExecutor {
         }
         return false;
     }
+
     private boolean handleGeiWoQian(CommandSender sender) {
         if (!(sender instanceof Player player)) {
             sender.sendMessage("§c仅玩家可用！");
@@ -82,6 +92,7 @@ public class CommandManager implements CommandExecutor {
         player.sendMessage("§c别想了，服务器不发钱！");
         return true;
     }
+
     private boolean handleSetChatTimes(CommandSender sender, String[] args) {
         if (!sender.hasPermission("darkpixel.admin")) {
             sender.sendMessage("§c需要管理员权限！");
@@ -105,6 +116,7 @@ public class CommandManager implements CommandExecutor {
         }
         return true;
     }
+
     private boolean handlePing(CommandSender sender, String[] args) {
         Player target = (args.length > 0) ? Bukkit.getPlayer(args[0]) : (sender instanceof Player ? (Player) sender : null);
         if (target == null) {

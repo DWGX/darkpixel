@@ -26,7 +26,7 @@ public class Global {
     private final WorldData worldData;
     private final PlayerFreeze playerFreeze;
     private final MotdUtils motdUtils;
-    private final SitUtils sitUtils;
+    private SitUtils sitUtils;
     private final YamlConfiguration minigameConfig;
     private final YamlConfiguration commandConfig;
     private final AntiCheatHandler antiCheatHandler;
@@ -82,6 +82,18 @@ public class Global {
 
     private SitUtils initSitUtils() {
         return configManager.getConfig().getBoolean("sitting.enabled", true) ? new SitUtils(this) : null;
+    }
+
+    public void updateSitUtils() {
+        boolean enabled = configManager.getConfig().getBoolean("sitting.enabled", true);
+        if (enabled && sitUtils == null) {
+            sitUtils = new SitUtils(this);
+            plugin.getServer().getPluginManager().registerEvents(sitUtils, plugin);
+            plugin.getLogger().info("SitUtils 已动态启用");
+        } else if (!enabled && sitUtils != null) {
+            sitUtils = null;
+            plugin.getLogger().info("SitUtils 已动态禁用");
+        }
     }
 
     private void registerEvents() {
