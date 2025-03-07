@@ -5,14 +5,13 @@ import com.darkpixel.anticheat.Detector;
 import com.darkpixel.anticheat.PlayerCheatData;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
-import org.bukkit.Bukkit;
 
 public class HeadRotationDetector implements Detector {
     private final double maxSpeed;
     private final AntiCheatHandler handler;
 
     public HeadRotationDetector(YamlConfiguration config, AntiCheatHandler handler) {
-        this.maxSpeed = config.getDouble("detectors.head_rotation.max_speed", 150.0); // 从50.0提高到150.0
+        this.maxSpeed = config.getDouble("detectors.head_rotation.max_speed", 200.0);
         this.handler = handler;
     }
 
@@ -25,15 +24,10 @@ public class HeadRotationDetector implements Detector {
             double deltaPitch = Math.abs(normalizeAngle(pitch - data.lastPitch));
             double deltaTime = (timestamp - data.lastPacketTime) / 1000.0;
 
-            //避免除以接近0的时间差
             if (deltaTime < 0.01) return;
 
             double yawSpeed = deltaYaw / deltaTime;
             double pitchSpeed = deltaPitch / deltaTime;
-
-            //添加调试日志
-            Bukkit.getLogger().info(String.format("[DarkAC Debug] HeadRotation Check - Player: %s, YawSpeed: %.2f, PitchSpeed: %.2f, MaxSpeed: %.2f",
-                    player.getName(), yawSpeed, pitchSpeed, maxSpeed));
 
             if (yawSpeed > maxSpeed || pitchSpeed > maxSpeed) {
                 handler.triggerAlert(player, AntiCheatHandler.CheatType.FAST_HEAD_ROTATION,

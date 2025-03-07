@@ -84,9 +84,7 @@ public class AntiCheatHandler implements Listener, CommandExecutor, TabCompleter
         config.addDefault("ai_review.severe_bps_threshold", 75.0);
         config.addDefault("alert.frequency", 3);
         config.addDefault("history_retention_days", 30);
-        config.addDefault("detection.cooldown_ms", 1000L);
-        if (!config.isConfigurationSection("report_tickets")) config.createSection("report_tickets");
-        if (!config.isConfigurationSection("cheat_history")) config.createSection("cheat_history");
+        config.addDefault("detection.cooldown_ms", 2000L);
         config.options().copyDefaults(true);
         saveConfig();
         enabled = config.getBoolean("enabled", true);
@@ -121,7 +119,6 @@ public class AntiCheatHandler implements Listener, CommandExecutor, TabCompleter
                 long now = System.currentTimeMillis();
                 data.incrementPacketCount(event.getPacketType());
                 data.packetTimestamps.add(now);
-                data.packetTimestamps.removeIf(t -> now - t > 5000);
                 if (!enabled) return;
 
                 if (event.getPacketType() == PacketType.Play.Client.PLAYER_POSITION) {
@@ -143,7 +140,7 @@ public class AntiCheatHandler implements Listener, CommandExecutor, TabCompleter
     }
 
     private void checkAllDetectors(Player player, PlayerCheatData data, long now, double x, double y, double z, float... rotation) {
-        long cooldownMs = config.getLong("detection.cooldown_ms", 1000L);
+        long cooldownMs = config.getLong("detection.cooldown_ms", 2000L);
         if (now - data.lastPacketTime < cooldownMs) return;
 
         detectors.values().forEach(detector -> detector.check(player, data, now, x, y, z));
@@ -370,7 +367,8 @@ public class AntiCheatHandler implements Listener, CommandExecutor, TabCompleter
                 for (Player player : Bukkit.getOnlinePlayers()) {
                     PlayerCheatData data = cheatData.getOrDefault(player.getUniqueId(), new PlayerCheatData());
                     double bps = data.getAverageBps();
-                    if (bps > config.getDouble("detectors.blink.max_bps", 75.0)) {
+                    double severeBpsThreshold = config.getDouble("ai_review.severe_bps_threshold", 75.0);
+                    if (bps > severeBpsThreshold) {
                         triggerAlert(player, CheatType.BLINK, "BPS: " + String.format("%.2f", bps));
                     }
                 }
@@ -386,13 +384,11 @@ public class AntiCheatHandler implements Listener, CommandExecutor, TabCompleter
         if (data == null) return;
 
         long now = System.currentTimeMillis();
-        if (now - data.lastAlertTime < config.getLong("detection.cooldown_ms", 1000L)) return;
+        long cooldownMs = config.getLong("detection.cooldown_ms", 2000L);
+        if (now - data.lastAlertTime < cooldownMs) return;
 
         Map<CheatType, Integer> counts = triggerCounts.computeIfAbsent(uuid, k -> new HashMap<>());
         int violationCount = counts.merge(type, 1, Integer::sum);
-
-        LogUtil.info(String.format("[DarkAC Debug] Player: %s, Type: %s, Details: %s, ViolationCount: %d, AlertsEnabled: %b",
-                player.getName(), type, details, violationCount, alertsEnabled));
 
         data.lastAlertTime = now;
 
@@ -423,27 +419,32 @@ public class AntiCheatHandler implements Listener, CommandExecutor, TabCompleter
                     .filter(Player::isOp)
                     .forEach(op -> op.sendMessage("§e" + reviewMessage));
             LogUtil.warning(reviewMessage);
-
             triggerAIReview(player, ticketId, null);
             counts.put(type, 0);
         }
     }
 
     private CompletableFuture<String> aiAnalyzeCheat(Player player, CheatType type, String details, int count) {
+        double severeSpeedThreshold = config.getDouble("ai_review.severe_speed_threshold", 10.0);
+        double severeBpsThreshold = config.getDouble("ai_review.severe_bps_threshold", 75.0);
+        PlayerCheatData data = cheatData.getOrDefault(player.getUniqueId(), new PlayerCheatData());
+        double currentBps = data.getAverageBps();
+
         String prompt = String.format(
                 "你是Minecraft服务器的反作弊AI分析助手。请根据以下信息判断玩家是否作弊，并返回 '/ban <player> AI: <理由>' 或 '/monitor <player> AI: <理由>'。\n" +
-                        "玩家: %s\n作弊类型: %s\n详情: %s\n触发次数: %d\n最近10条历史记录:\n%s",
-                player.getName(), type, details, count, getHistorySummary(player.getUniqueId())
+                        "玩家: %s\n作弊类型: %s\n详情: %s\n触发次数: %d\n当前BPS: %.2f (严重阈值: %.2f)\n最近10条历史记录:\n%s",
+                player.getName(), type, details, count, currentBps, severeBpsThreshold, getHistorySummary(player.getUniqueId())
         );
         aiChat.sendMessage(player, prompt, false);
         return CompletableFuture.supplyAsync(() -> {
             try {
-                Thread.sleep(1000);
+                Thread.sleep(1000); // 模拟AI处理延迟
                 int threshold = config.getInt("ai_review.trigger_threshold", 5);
-                if (count >= threshold * 2) {
-                    return "/ban " + player.getName() + " AI: Repeated severe violations detected";
+                boolean isSevere = count >= threshold * 2 || currentBps > severeBpsThreshold;
+                if (isSevere) {
+                    return "/ban " + player.getName() + " AI: Repeated severe violations or excessive BPS detected";
                 }
-                return "/monitor " + player.getName() + " AI: Suspicious activity detected";
+                return "/monitor " + player.getName() + " AI: Suspicious activity detected, further monitoring required";
             } catch (InterruptedException e) {
                 return "/monitor " + player.getName() + " AI: Analysis interrupted";
             }
@@ -482,6 +483,11 @@ public class AntiCheatHandler implements Listener, CommandExecutor, TabCompleter
         Bukkit.getOnlinePlayers().stream()
                 .filter(Player::isOp)
                 .forEach(op -> op.sendMessage("§eNew report ticket " + ticketId + ": " + reporter.getName() + " reported " + target.getName()));
+
+        int reportThreshold = config.getInt("report_threshold", 2);
+        if (targetReports.size() >= reportThreshold) {
+            triggerAIReview(target, "REPORT-" + ticketId, null);
+        }
     }
 
     private void saveReportTicket(String ticketId, UUID target, UUID reporter, boolean reviewed) {

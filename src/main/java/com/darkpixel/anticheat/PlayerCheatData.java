@@ -2,10 +2,10 @@ package com.darkpixel.anticheat;
 
 import com.github.retrooper.packetevents.protocol.packettype.PacketTypeCommon;
 import org.bukkit.Location;
-import java.util.ArrayDeque;
-import java.util.Deque;
+
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentLinkedDeque;
 
 public class PlayerCheatData {
     public Float lastYaw = null;
@@ -16,8 +16,8 @@ public class PlayerCheatData {
     public long lastHitTime = 0;
     public long lastAlertTime = 0;
     public int blinkCount = 0;
-    public Deque<Long> clickTimes = new ArrayDeque<>(50);
-    public Deque<Long> packetTimestamps = new ArrayDeque<>(100);
+    public ConcurrentLinkedDeque<Long> clickTimes = new ConcurrentLinkedDeque<>(); // 线程安全
+    public ConcurrentLinkedDeque<Long> packetTimestamps = new ConcurrentLinkedDeque<>(); // 线程安全
     public Map<PacketTypeCommon, Integer> packetCounts = new HashMap<>();
     public int totalPackets = 0;
     public int anomalyCount = 0;
@@ -30,14 +30,12 @@ public class PlayerCheatData {
     }
 
     public double getAverageBps() {
-        if (packetTimestamps.isEmpty()) return 0.0;
         long now = System.currentTimeMillis();
-        packetTimestamps.removeIf(t -> now - t > 5000);
-        return packetTimestamps.size() / 5.0;
+        packetTimestamps.removeIf(t -> now - t > 5000); // 线程安全移除
+        return packetTimestamps.isEmpty() ? 0.0 : packetTimestamps.size() / 5.0; // 每 5 秒平均 BPS
     }
 
     public double getPeakBps() {
-        if (packetTimestamps.isEmpty()) return 0.0;
         long now = System.currentTimeMillis();
         Map<Long, Integer> secondCounts = new HashMap<>();
         for (long timestamp : packetTimestamps) {

@@ -11,30 +11,29 @@ alert:
   frequency: 3
 history_retention_days: 30
 detection:
-  cooldown_ms: 1000
+  cooldown_ms: 2000
 detectors:
-  head_rotation:
-    max_speed: 150.0
-  click_speed:
-    max_cps: 20.0
-  movement:
-    max_speed: 0.6
-  vertical_teleport:
-    max_delta_y: 1.5
-  blink:
-    max_interval_ms: 150
-    trigger_count: 10
-    max_bps: 75.0
-  killaura:
-    max_angle_deviation: 90.0
-    max_hits_per_second: 20.0
   reach:
-    max_reach_distance: 4.5
+    max_reach_distance: 6.0
+  head_rotation:
+    max_speed: 200.0
+  movement:
+    max_speed: 0.8
+  blink:
+    max_interval_ms: 200
+    trigger_count: 15
+  killaura:
+    max_angle_deviation: 120.0
+    max_hits_per_second: 20.0
+  fly_hack:
+    max_air_time: 6000
+    max_vertical_speed: 1.0
+  speed_hack:
+    max_speed: 1.0
   auto_clicker:
     max_cps: 20.0
     min_variance: 5.0
-  fly_hack:
-    max_air_time: 5000
-    max_vertical_speed: 1.0
-  speed_hack:
-    max_speed: 0.8
+  click_speed:
+    max_cps: 20.0
+  vertical_teleport:
+    max_delta_y: 1.5
