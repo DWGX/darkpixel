@@ -18,6 +18,7 @@ import org.bukkit.Location;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
@@ -329,29 +330,45 @@ public class AntiCheatHandler implements Listener, CommandExecutor {
             @Override
             public void run() {
                 long now = System.currentTimeMillis();
-                Map<String, Object> packetRecords = (Map<String, Object>) config.get("packet_records", new HashMap<>());
+
+                ConfigurationSection packetRecordsSection = config.getConfigurationSection("packet_records");
+                Map<String, Object> packetRecords = packetRecordsSection != null ? packetRecordsSection.getValues(false) : new HashMap<>();
+                int packetRecordsRemoved = packetRecords.size();
                 packetRecords.entrySet().removeIf(entry -> {
                     Map<String, Object> record = (Map<String, Object>) entry.getValue();
                     return now - (long) record.get("timestamp") > 24 * 60 * 60 * 1000;
                 });
+                packetRecordsRemoved -= packetRecords.size();
                 config.set("packet_records", packetRecords);
 
-                Map<String, Object> cheatRecords = (Map<String, Object>) config.get("cheat_records", new HashMap<>());
+                ConfigurationSection cheatRecordsSection = config.getConfigurationSection("cheat_records");
+                Map<String, Object> cheatRecords = cheatRecordsSection != null ? cheatRecordsSection.getValues(false) : new HashMap<>();
+                int[] cheatRecordsRemoved = new int[]{0}; // 使用数组来绕过 final 限制
                 cheatRecords.entrySet().forEach(entry -> {
                     List<Map<String, Object>> triggers = (List<Map<String, Object>>) entry.getValue();
+                    int before = triggers.size();
                     triggers.removeIf(t -> now - (long) t.get("timestamp") > 7 * 24 * 60 * 60 * 1000);
+                    cheatRecordsRemoved[0] += (before - triggers.size()); // 修改数组内容
                 });
                 config.set("cheat_records", cheatRecords);
 
-                Map<String, Object> aiReviews = (Map<String, Object>) config.get("ai_reviews", new HashMap<>());
+                ConfigurationSection aiReviewsSection = config.getConfigurationSection("ai_reviews");
+                Map<String, Object> aiReviews = aiReviewsSection != null ? aiReviewsSection.getValues(false) : new HashMap<>();
+                int aiReviewsRemoved = aiReviews.size();
                 aiReviews.entrySet().removeIf(entry -> now - (long) ((Map<String, Object>) entry.getValue()).get("timestamp") > 30 * 24 * 60 * 60 * 1000);
+                aiReviewsRemoved -= aiReviews.size();
                 config.set("ai_reviews", aiReviews);
 
                 saveConfig();
+
+                //记录清理日志
+                LogUtil.info(String.format(
+                        "Cleanup task completed: Removed %d packet records, %d cheat records, and %d AI reviews.",
+                        packetRecordsRemoved, cheatRecordsRemoved[0], aiReviewsRemoved
+                ));
             }
         }.runTaskTimer(context.getPlugin(), 0L, 1200L);
     }
-
     public void triggerAlert(Player player, CheatType type, String details) {
         UUID uuid = player.getUniqueId();
         Map<CheatType, Integer> counts = triggerCounts.computeIfAbsent(uuid, k -> new HashMap<>());
