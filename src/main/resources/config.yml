@@ -63,3 +63,6 @@ sitting:
     - stair
     - slab
     - step
+  height-offset:
+    blocks: 0.5
+    players: 0.2

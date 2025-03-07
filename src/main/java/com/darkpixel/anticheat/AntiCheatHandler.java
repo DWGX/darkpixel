@@ -37,12 +37,11 @@ public class AntiCheatHandler implements Listener, CommandExecutor {
     private final PlayerData playerData;
     private final File configFile;
     private YamlConfiguration config;
-    private boolean enabled = false;
+    private boolean enabled;
     private final Map<UUID, PlayerCheatData> cheatData = new ConcurrentHashMap<>();
     private final Map<UUID, List<Report>> reports = new ConcurrentHashMap<>();
     private final Map<CheatType, Detector> detectors = new EnumMap<>(CheatType.class);
     private final double maxBps;
-    private final Map<UUID, Map<String, Object>> packetCache = new ConcurrentHashMap<>();
     private final Map<UUID, InteractData> interactData = new ConcurrentHashMap<>();
     private final Map<UUID, Map<CheatType, Integer>> triggerCounts = new ConcurrentHashMap<>();
 
@@ -72,25 +71,9 @@ public class AntiCheatHandler implements Listener, CommandExecutor {
         config.addDefault("enabled", false);
         config.addDefault("report_threshold", 2);
         config.addDefault("report_window_ms", 300000L);
-        config.addDefault("alert_prefs", new HashMap<String, Boolean>());
-        config.addDefault("packet_records", new HashMap<String, Object>());
-        config.addDefault("cheat_records", new HashMap<String, Object>());
-        config.addDefault("ai_reviews", new HashMap<String, Object>());
-        config.addDefault("detectors.head_rotation.max_speed", 50.0);
-        config.addDefault("detectors.click_speed.max_cps", 20.0);
-        config.addDefault("detectors.movement.max_speed", 0.6);
-        config.addDefault("detectors.vertical_teleport.max_delta_y", 1.5);
-        config.addDefault("detectors.blink.max_interval_ms", 150L);
-        config.addDefault("detectors.blink.trigger_count", 10);
-        config.addDefault("detectors.blink.max_bps", 50.0);
-        config.addDefault("detectors.killaura.max_angle_deviation", 45.0);
-        config.addDefault("detectors.killaura.max_hits_per_second", 10.0);
-        config.addDefault("detectors.reach.max_reach_distance", 4.5);
-        config.addDefault("detectors.auto_clicker.max_cps", 20.0);
-        config.addDefault("detectors.auto_clicker.min_variance", 5.0);
-        config.addDefault("detectors.fly_hack.max_air_time", 5000L);
-        config.addDefault("detectors.fly_hack.max_vertical_speed", 1.0);
-        config.addDefault("detectors.speed_hack.max_speed", 0.8);
+        if (!config.isConfigurationSection("alert_prefs")) {
+            config.createSection("alert_prefs", new HashMap<String, Boolean>());
+        }
         config.options().copyDefaults(true);
         saveConfig();
         enabled = config.getBoolean("enabled", false);
@@ -139,9 +122,6 @@ public class AntiCheatHandler implements Listener, CommandExecutor {
                     WrapperPlayClientInteractEntity interact = new WrapperPlayClientInteractEntity(event);
                     interactData.put(uuid, new InteractData(interact.getEntityId(), now));
                     detectors.get(CheatType.HIGH_CPS).check(player, data, now);
-                }
-                if (data.totalPackets % 100 == 0) {
-                    savePacketRecords(player, data);
                 }
             }
         });
@@ -205,7 +185,7 @@ public class AntiCheatHandler implements Listener, CommandExecutor {
         packetRecord.put("total_packets", data.totalPackets);
         packetRecord.put("bps_avg", data.getAverageBps());
         packetRecord.put("timestamp", System.currentTimeMillis());
-        config.set("packet_records." + player.getUniqueId().toString(), packetRecord);
+        config.set("packet_records." + player.getUniqueId(), packetRecord);
         saveConfig();
     }
 
@@ -214,7 +194,7 @@ public class AntiCheatHandler implements Listener, CommandExecutor {
         record.put("type", type.name());
         record.put("details", details);
         record.put("timestamp", System.currentTimeMillis());
-        String path = "cheat_records." + player.getUniqueId().toString();
+        String path = "cheat_records." + player.getUniqueId();
         List<Map<String, Object>> triggers = (List<Map<String, Object>>) config.getList(path, new ArrayList<>());
         triggers.add(record);
         if (triggers.size() > 100) triggers.remove(0);
@@ -261,18 +241,16 @@ public class AntiCheatHandler implements Listener, CommandExecutor {
                     sender.sendMessage("§cOnly players can toggle alerts!");
                     return true;
                 }
-                Player player = (Player) sender;
-                toggleAlertPreference(player, false);
-                sender.sendMessage("§eRegular alerts " + (isDetailedAlertEnabled(player) ? "disabled" : "enabled"));
+                toggleAlertPreference((Player) sender, false);
+                sender.sendMessage("§eRegular alerts " + (isDetailedAlertEnabled((Player) sender) ? "disabled" : "enabled"));
                 break;
             case "detailedalert":
                 if (!(sender instanceof Player)) {
                     sender.sendMessage("§cOnly players can toggle detailed alerts!");
                     return true;
                 }
-                Player detailedPlayer = (Player) sender;
-                toggleAlertPreference(detailedPlayer, true);
-                sender.sendMessage("§eDetailed alerts " + (isDetailedAlertEnabled(detailedPlayer) ? "enabled" : "disabled"));
+                toggleAlertPreference((Player) sender, true);
+                sender.sendMessage("§eDetailed alerts " + (isDetailedAlertEnabled((Player) sender) ? "enabled" : "disabled"));
                 break;
             case "status":
                 sender.sendMessage("§eDarkAC is " + (enabled ? "enabled" : "disabled"));
@@ -285,7 +263,8 @@ public class AntiCheatHandler implements Listener, CommandExecutor {
 
     private void toggleAlertPreference(Player player, boolean detailed) {
         String uuid = player.getUniqueId().toString();
-        Map<String, Boolean> prefs = (Map<String, Boolean>) config.get("alert_prefs", new HashMap<>());
+        ConfigurationSection prefsSection = config.getConfigurationSection("alert_prefs");
+        Map<String, Object> prefs = prefsSection != null ? prefsSection.getValues(false) : new HashMap<>();
         prefs.put(uuid, detailed);
         config.set("alert_prefs", prefs);
         saveConfig();
@@ -293,8 +272,11 @@ public class AntiCheatHandler implements Listener, CommandExecutor {
 
     private boolean isDetailedAlertEnabled(Player player) {
         String uuid = player.getUniqueId().toString();
-        Map<String, Boolean> prefs = (Map<String, Boolean>) config.get("alert_prefs", new HashMap<>());
-        return prefs.getOrDefault(uuid, false);
+        ConfigurationSection prefsSection = config.getConfigurationSection("alert_prefs");
+        if (prefsSection == null) return false;
+        Map<String, Object> prefs = prefsSection.getValues(false);
+        Object value = prefs.getOrDefault(uuid, false);
+        return value instanceof Boolean && (Boolean) value;
     }
 
     private void startReportCheck() {
@@ -314,10 +296,11 @@ public class AntiCheatHandler implements Listener, CommandExecutor {
         new BukkitRunnable() {
             @Override
             public void run() {
+                if (!enabled) return;
                 for (Player player : Bukkit.getOnlinePlayers()) {
                     PlayerCheatData data = cheatData.getOrDefault(player.getUniqueId(), new PlayerCheatData());
                     double bps = data.getAverageBps();
-                    if (bps > maxBps && enabled) {
+                    if (bps > maxBps) {
                         triggerAlert(player, CheatType.BLINK, "BPS: " + String.format("%.2f", bps));
                     }
                 }
@@ -330,45 +313,30 @@ public class AntiCheatHandler implements Listener, CommandExecutor {
             @Override
             public void run() {
                 long now = System.currentTimeMillis();
-
-                ConfigurationSection packetRecordsSection = config.getConfigurationSection("packet_records");
-                Map<String, Object> packetRecords = packetRecordsSection != null ? packetRecordsSection.getValues(false) : new HashMap<>();
-                int packetRecordsRemoved = packetRecords.size();
-                packetRecords.entrySet().removeIf(entry -> {
-                    Map<String, Object> record = (Map<String, Object>) entry.getValue();
-                    return now - (long) record.get("timestamp") > 24 * 60 * 60 * 1000;
-                });
-                packetRecordsRemoved -= packetRecords.size();
+                ConfigurationSection packetSection = config.getConfigurationSection("packet_records");
+                Map<String, Object> packetRecords = packetSection != null ? packetSection.getValues(false) : new HashMap<>();
+                int packetRemoved = packetRecords.size();
+                packetRecords.entrySet().removeIf(e -> now - (long) ((Map<?, ?>) e.getValue()).get("timestamp") > 86400000);
+                packetRemoved -= packetRecords.size();
                 config.set("packet_records", packetRecords);
 
-                ConfigurationSection cheatRecordsSection = config.getConfigurationSection("cheat_records");
-                Map<String, Object> cheatRecords = cheatRecordsSection != null ? cheatRecordsSection.getValues(false) : new HashMap<>();
-                int[] cheatRecordsRemoved = new int[]{0}; // 使用数组来绕过 final 限制
-                cheatRecords.entrySet().forEach(entry -> {
-                    List<Map<String, Object>> triggers = (List<Map<String, Object>>) entry.getValue();
+                ConfigurationSection cheatSection = config.getConfigurationSection("cheat_records");
+                Map<String, Object> cheatRecords = cheatSection != null ? cheatSection.getValues(false) : new HashMap<>();
+                int[] cheatRemoved = {0};
+                cheatRecords.forEach((k, v) -> {
+                    List<Map<String, Object>> triggers = (List<Map<String, Object>>) v;
                     int before = triggers.size();
-                    triggers.removeIf(t -> now - (long) t.get("timestamp") > 7 * 24 * 60 * 60 * 1000);
-                    cheatRecordsRemoved[0] += (before - triggers.size()); // 修改数组内容
+                    triggers.removeIf(t -> now - (long) t.get("timestamp") > 604800000);
+                    cheatRemoved[0] += before - triggers.size();
                 });
                 config.set("cheat_records", cheatRecords);
 
-                ConfigurationSection aiReviewsSection = config.getConfigurationSection("ai_reviews");
-                Map<String, Object> aiReviews = aiReviewsSection != null ? aiReviewsSection.getValues(false) : new HashMap<>();
-                int aiReviewsRemoved = aiReviews.size();
-                aiReviews.entrySet().removeIf(entry -> now - (long) ((Map<String, Object>) entry.getValue()).get("timestamp") > 30 * 24 * 60 * 60 * 1000);
-                aiReviewsRemoved -= aiReviews.size();
-                config.set("ai_reviews", aiReviews);
-
                 saveConfig();
-
-                //记录清理日志
-                LogUtil.info(String.format(
-                        "Cleanup task completed: Removed %d packet records, %d cheat records, and %d AI reviews.",
-                        packetRecordsRemoved, cheatRecordsRemoved[0], aiReviewsRemoved
-                ));
+                LogUtil.info(String.format("Cleanup: Removed %d packet records, %d cheat records.", packetRemoved, cheatRemoved[0]));
             }
         }.runTaskTimer(context.getPlugin(), 0L, 1200L);
     }
+
     public void triggerAlert(Player player, CheatType type, String details) {
         UUID uuid = player.getUniqueId();
         Map<CheatType, Integer> counts = triggerCounts.computeIfAbsent(uuid, k -> new HashMap<>());
@@ -379,14 +347,9 @@ public class AntiCheatHandler implements Listener, CommandExecutor {
             String detailedAlert = String.format("[DarkAC Detailed] %s triggered %s: %s (x%d) - BPS: %.2f, Pos: %.2f,%.2f,%.2f",
                     player.getName(), type.getName(), details, count, cheatData.get(uuid).getAverageBps(),
                     player.getLocation().getX(), player.getLocation().getY(), player.getLocation().getZ());
-
-            Bukkit.getOnlinePlayers().stream().filter(Player::isOp).forEach(op -> {
-                if (isDetailedAlertEnabled(op)) {
-                    op.sendMessage("§e" + detailedAlert);
-                } else {
-                    op.sendMessage("§e" + simpleAlert);
-                }
-            });
+            Bukkit.getOnlinePlayers().stream()
+                    .filter(Player::isOp)
+                    .forEach(op -> op.sendMessage("§e" + (isDetailedAlertEnabled(op) ? detailedAlert : simpleAlert)));
             LogUtil.warning(simpleAlert);
             saveCheatRecord(player, type, details);
             counts.put(type, 0);
@@ -394,8 +357,8 @@ public class AntiCheatHandler implements Listener, CommandExecutor {
     }
 
     public void addReport(Player target, Player reporter) {
-        List<Report> reportList = reports.computeIfAbsent(target.getUniqueId(), k -> new ArrayList<>());
-        reportList.add(new Report(reporter.getUniqueId(), System.currentTimeMillis()));
+        reports.computeIfAbsent(target.getUniqueId(), k -> new ArrayList<>())
+                .add(new Report(reporter.getUniqueId(), System.currentTimeMillis()));
     }
 
     static class InteractData {

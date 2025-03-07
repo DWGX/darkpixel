@@ -117,6 +117,13 @@ public class ConfigManager {
         getConfig().set("npc_locations", locations);
         saveConfig("config.yml");
     }
+    public double getSittingHeightOffsetBlocks() {
+        return getConfig().getDouble("sitting.height-offset.blocks", 0.5);
+    }
+
+    public double getSittingHeightOffsetPlayers() {
+        return getConfig().getDouble("sitting.height-offset.players", 0.2);
+    }
     public JavaPlugin getPlugin() { return plugin; }
     public synchronized void saveConfig(String configName) {
         YamlConfiguration config = configs.get(configName);

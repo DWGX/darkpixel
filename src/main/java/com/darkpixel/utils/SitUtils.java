@@ -47,7 +47,9 @@ public class SitUtils implements Listener {
         if (!context.getConfigManager().canBeSatOn(targetPlayer) ||
                 context.getConfigManager().getSittingBlockedWorlds().contains(player.getWorld().getName())) return;
         event.setCancelled(true);
-        sitDown(player, targetPlayer.getLocation());
+        // 调整为目标玩家的头部位置
+        Location seatLocation = targetPlayer.getLocation().clone().add(0, 1.8, 0); // 1.8 是玩家的身高
+        sitDown(player, seatLocation);
     }
     public void sitDown(Player player, Location seatLocation) {
         sitDown(player, seatLocation, false);
@@ -57,7 +59,12 @@ public class SitUtils implements Listener {
         sitDown(player, seatLocation, true);
     }
     private void sitDown(Player player, Location seatLocation, boolean fromBlock) {
-        ArmorStand seat = (ArmorStand) player.getWorld().spawnEntity(seatLocation.subtract(0, 0.5, 0), EntityType.ARMOR_STAND);
+        double offset = fromBlock ? context.getConfigManager().getSittingHeightOffsetBlocks()
+                : context.getConfigManager().getSittingHeightOffsetPlayers();
+        ArmorStand seat = (ArmorStand) player.getWorld().spawnEntity(
+                seatLocation.clone().subtract(0, offset, 0),
+                EntityType.ARMOR_STAND
+        );
         seat.setGravity(false);
         seat.setVisible(false);
         seat.setMarker(true);
