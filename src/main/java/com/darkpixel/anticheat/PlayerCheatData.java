@@ -14,6 +14,7 @@ public class PlayerCheatData {
     public long lastPacketTime = 0;
     public long lastMoveTime = 0;
     public long lastHitTime = 0;
+    public long lastAlertTime = 0;
     public int blinkCount = 0;
     public Deque<Long> clickTimes = new ArrayDeque<>(50);
     public Deque<Long> packetTimestamps = new ArrayDeque<>(100);

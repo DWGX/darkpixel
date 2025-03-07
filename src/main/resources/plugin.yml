@@ -49,7 +49,7 @@ commands:
     usage: /<command> [player]
   darkac:
     description: Manage DarkAC anti-cheat
-    usage: /<command> <toggle|alert|detailedalert|status>
+    usage: /<command> <toggle|alert|detailedalert|status|review>
     permission: darkpixel.admin
   report:
     description: Report a player for cheating

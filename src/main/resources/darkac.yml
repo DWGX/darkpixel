@@ -1,13 +1,20 @@
-enabled: false
+enabled: true
+alerts_enabled: true
 report_threshold: 2
 report_window_ms: 300000
-alert_prefs: {}
-packet_records: {}
-cheat_records: {}
-ai_reviews: {}
+ai_review:
+  trigger_threshold: 5
+  auto_enabled: true
+  severe_speed_threshold: 10.0
+  severe_bps_threshold: 75.0
+alert:
+  frequency: 3
+history_retention_days: 30
+detection:
+  cooldown_ms: 1000
 detectors:
   head_rotation:
-    max_speed: 50.0
+    max_speed: 150.0
   click_speed:
     max_cps: 20.0
   movement:
@@ -17,10 +24,10 @@ detectors:
   blink:
     max_interval_ms: 150
     trigger_count: 10
-    max_bps: 50.0
+    max_bps: 75.0
   killaura:
-    max_angle_deviation: 45.0
-    max_hits_per_second: 10.0
+    max_angle_deviation: 90.0
+    max_hits_per_second: 20.0
   reach:
     max_reach_distance: 4.5
   auto_clicker:

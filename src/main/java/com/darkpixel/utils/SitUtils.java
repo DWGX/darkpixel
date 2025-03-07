@@ -13,95 +13,55 @@ import org.bukkit.event.block.Action;
 import org.bukkit.event.entity.EntityDismountEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
-import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.metadata.FixedMetadataValue;
-import java.util.HashMap;
-import java.util.Map;
+import org.bukkit.event.EventPriority;
 
 public class SitUtils implements Listener {
-    private final Global context;
-    private final Map<Player, ArmorStand> sittingPlayers = new HashMap<>();
+    private final Global plugin;
 
-    public SitUtils(Global context) {
-        this.context = context;
-    }
-
-    public void reloadConfig() {
-        LogUtil.info("SitUtils 配置已重新加载");
+    public SitUtils(Global plugin) {
+        this.plugin = plugin;
     }
 
     @EventHandler
+    public void onPlayerInteractAtEntity(PlayerInteractEntityEvent event) {
+        if (!plugin.getConfigManager().isSittingEnabled()) return;
+        if (!plugin.getConfigManager().isSittingOnPlayersAllowed()) return;
+        if (plugin.getConfigManager().getSittingBlockedWorlds().contains(event.getPlayer().getWorld().getName())) return;
+        if (event.getPlayer().isSneaking()) return;
+        if (!(event.getRightClicked() instanceof Player other)) return;
+        other.addPassenger(event.getPlayer());
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST)
     public void onPlayerInteract(PlayerInteractEvent event) {
-        if (!context.getConfigManager().isSittingEnabled() || event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
-        Player player = event.getPlayer();
-        Block block = event.getClickedBlock();
-        if (block == null || player.isSneaking() || sittingPlayers.containsKey(player)) return;
-        if (!context.getConfigManager().isSittingOnBlocksAllowed() ||
-                context.getConfigManager().getSittingBlockedWorlds().contains(player.getWorld().getName())) return;
-        String blockName = block.getType().name().toLowerCase();
-        if (!context.getConfigManager().getValidSittingBlocks().stream().anyMatch(blockName::contains)) return;
-        event.setCancelled(true);
-        sitDown(player, block.getLocation().add(0.5, -0.5, 0.5));
+        if (event.getClickedBlock() == null) return;
+        if (!plugin.getConfigManager().isSittingEnabled()) return;
+        if (!plugin.getConfigManager().isSittingOnBlocksAllowed()) return;
+        if (plugin.getConfigManager().getSittingBlockedWorlds().contains(event.getClickedBlock().getWorld().getName())) return;
+        if (event.getPlayer().isSneaking()) return;
+        if (event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
+        for (String block : plugin.getConfigManager().getValidSittingBlocks()) {
+            if (event.getClickedBlock().getType().name().toLowerCase().contains(block.toLowerCase())) {
+                sitDown(event.getPlayer(), event.getClickedBlock(), false);
+            }
+        }
     }
 
     @EventHandler
-    public void onPlayerInteractEntity(PlayerInteractEntityEvent event) {
-        if (!context.getConfigManager().isSittingEnabled() || !context.getConfigManager().isSittingOnPlayersAllowed()) return;
-        Player player = event.getPlayer();
-        Entity target = event.getRightClicked();
-        if (!(target instanceof Player targetPlayer) || sittingPlayers.containsKey(player)) return;
-        if (!context.getConfigManager().canBeSatOn(targetPlayer) ||
-                context.getConfigManager().getSittingBlockedWorlds().contains(player.getWorld().getName())) return;
-        event.setCancelled(true);
-        Location seatLocation = targetPlayer.getLocation().clone().add(0, 1.8, 0);
-        sitDown(player, seatLocation);
-    }
-
-    public void sitDown(Player player, Location seatLocation) {
-        sitDown(player, seatLocation, false);
+    public void onVehicleExit(EntityDismountEvent event) {
+        if (!(event.getEntity() instanceof Player player)) return;
+        if (event.getDismounted() instanceof ArmorStand stand) {
+            player.teleportAsync(player.getLocation().add(0, 1, 0));
+            stand.remove();
+        }
     }
 
     public void sitDown(Player player, Block block, boolean adjustHeight) {
-        Location seatLocation = block.getLocation().add(0.5, adjustHeight ? -0.5 : 0, 0.5);
-        sitDown(player, seatLocation, true);
-    }
-
-    private void sitDown(Player player, Location seatLocation, boolean fromBlock) {
-        double offset = fromBlock ? context.getConfigManager().getSittingHeightOffsetBlocks()
-                : context.getConfigManager().getSittingHeightOffsetPlayers();
-        ArmorStand seat = (ArmorStand) player.getWorld().spawnEntity(
-                seatLocation.clone().subtract(0, offset, 0),
-                EntityType.ARMOR_STAND
-        );
+        Location seatLocation = block.getLocation().add(0.5, 0.5, 0.5);
+        ArmorStand seat = (ArmorStand) player.getWorld().spawnEntity(seatLocation, EntityType.ARMOR_STAND);
         seat.setGravity(false);
         seat.setVisible(false);
         seat.setMarker(true);
-        seat.setMetadata("SitUtilsSeat", new FixedMetadataValue(context.getPlugin(), true));
         seat.addPassenger(player);
-        sittingPlayers.put(player, seat);
-        player.sendMessage("§a你已坐下！右键地面或跳跃以起身。");
-    }
-
-    @EventHandler
-    public void onDismount(EntityDismountEvent event) {
-        if (!(event.getEntity() instanceof Player player) || !sittingPlayers.containsKey(player)) return;
-        ArmorStand seat = sittingPlayers.remove(player);
-        if (seat != null && seat.hasMetadata("SitUtilsSeat")) {
-            seat.remove();
-            player.sendMessage("§a你已起身！");
-        }
-    }
-
-    @EventHandler
-    public void onPlayerQuit(PlayerQuitEvent event) {
-        Player player = event.getPlayer();
-        ArmorStand seat = sittingPlayers.remove(player);
-        if (seat != null && seat.hasMetadata("SitUtilsSeat")) {
-            seat.remove();
-        }
-    }
-
-    public Map<Player, ArmorStand> getSittingPlayers() {
-        return sittingPlayers;
     }
 }
