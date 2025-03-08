@@ -1,14 +1,17 @@
 package com.darkpixel.manager;
+
 import com.darkpixel.utils.FileUtil;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 import java.io.File;
 import java.util.*;
+
 public class ConfigManager {
     private final JavaPlugin plugin;
     private final Map<String, YamlConfiguration> configs = new HashMap<>();
     private final Map<String, File> configFiles = new HashMap<>();
+
     public ConfigManager(JavaPlugin plugin) {
         this.plugin = plugin;
         String[] configNames = {"config.yml", "minigame.yml", "commands.yml", "chat_history.yml",
@@ -20,6 +23,7 @@ public class ConfigManager {
         }
         initDefaultConfig();
     }
+
     private void initDefaultConfig() {
         YamlConfiguration config = configs.get("config.yml");
         config.addDefault("api_key", "sk-c4a51bdeab1f4a53805ecac6c8bf53f6");
@@ -51,18 +55,22 @@ public class ConfigManager {
         config.options().copyDefaults(true);
         saveConfig("config.yml");
     }
+
     public synchronized void reloadAllConfigs() {
         for (String configName : configFiles.keySet()) {
             configs.put(configName, YamlConfiguration.loadConfiguration(configFiles.get(configName)));
             plugin.getLogger().info("已重新加载配置文件: " + configName);
         }
     }
+
     public YamlConfiguration getConfig(String configName) {
         return configs.getOrDefault(configName, new YamlConfiguration());
     }
+
     public YamlConfiguration getConfig() {
         return getConfig("config.yml");
     }
+
     public YamlConfiguration getMinigameConfig() { return getConfig("minigame.yml"); }
     public YamlConfiguration getCommandConfig() { return getConfig("commands.yml"); }
     public YamlConfiguration getChatHistoryConfig() { return getConfig("chat_history.yml"); }
@@ -84,6 +92,7 @@ public class ConfigManager {
         }
         return limits;
     }
+
     public List<String> getNpcLocations() { return getConfig().getStringList("npc_locations"); }
     public long getAiWelcomeInterval() { return getConfig().getLong("ai_welcome_interval", 3600000L); }
     public boolean isVanillaBlockingEnabled() { return getConfig().getBoolean("blocking.enable-vanilla-blocking", false); }
@@ -95,28 +104,34 @@ public class ConfigManager {
     public boolean canBeSatOn(Player player) {
         return getConfig().getBoolean("sitting.player-permissions." + player.getUniqueId().toString(), true);
     }
+
     public synchronized void toggleSittingPermission(Player player) {
         String path = "sitting.player-permissions." + player.getUniqueId().toString();
         boolean current = getConfig().getBoolean(path, true);
         getConfig().set(path, !current);
         saveConfig("config.yml");
     }
+
     public boolean getSittingPermission(Player player) {
         return getConfig().getBoolean("sitting.player-permissions." + player.getUniqueId().toString(), true);
     }
+
     public synchronized void saveWhitelist(Set<String> whitelist) {
         getConfig().set("ai_whitelist", new ArrayList<>(whitelist));
         saveConfig("config.yml");
     }
+
     public synchronized void saveMessageLimits(Map<String, Integer> limits) {
         getConfig().set("player_message_limits", null);
         limits.forEach((k, v) -> getConfig().set("player_message_limits." + k, v));
         saveConfig("config.yml");
     }
+
     public synchronized void saveNpcLocations(List<String> locations) {
         getConfig().set("npc_locations", locations);
         saveConfig("config.yml");
     }
+
     public double getSittingHeightOffsetBlocks() {
         return getConfig().getDouble("sitting.height-offset.blocks", 0.5);
     }
@@ -124,7 +139,9 @@ public class ConfigManager {
     public double getSittingHeightOffsetPlayers() {
         return getConfig().getDouble("sitting.height-offset.players", 0.2);
     }
+
     public JavaPlugin getPlugin() { return plugin; }
+
     public synchronized void saveConfig(String configName) {
         YamlConfiguration config = configs.get(configName);
         File file = configFiles.get(configName);

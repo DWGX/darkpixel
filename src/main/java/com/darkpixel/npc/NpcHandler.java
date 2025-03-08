@@ -55,42 +55,76 @@ public class NpcHandler implements Listener, CommandExecutor, TabCompleter {
 
     private void reloadMissingNpcs() {
         List<String> npcLocations = configManager.getNpcLocations();
-        if (npcLocations == null || npcLocations.isEmpty()) return;
+        if (npcLocations == null || npcLocations.isEmpty()) {
+            Bukkit.getLogger().info("[NpcHandler] No NPC locations found in config.");
+            return;
+        }
 
         for (String locStr : npcLocations) {
             String[] parts = locStr.split(",");
-            if (parts.length != 7) continue;
+            if (parts.length != 7) {
+                Bukkit.getLogger().warning("[NpcHandler] Invalid NPC location format: " + locStr);
+                continue;
+            }
             Location loc = new Location(Bukkit.getWorld(parts[0]),
                     Double.parseDouble(parts[1]), Double.parseDouble(parts[2]), Double.parseDouble(parts[3]),
                     Float.parseFloat(parts[4]), Float.parseFloat(parts[5]));
             String customId = parts[6];
-            if (loc.getWorld() != null) {
-                clearNonNpcZombies(loc);
-                Zombie existingNpc = findExistingNpcAt(loc);
-                if (existingNpc != null) {
-                    if (!npcs.contains(existingNpc)) {
-                        configureNpc(existingNpc, loc, customId);
-                        npcs.add(existingNpc);
-                        if (customId != null && !customId.startsWith("auto_")) npcById.put(customId, existingNpc);
-                    }
+            if (loc.getWorld() == null) {
+                Bukkit.getLogger().warning("[NpcHandler] World not found for NPC at: " + locStr);
+                continue;
+            }
+
+            if (!loc.getChunk().isLoaded()) {
+                loc.getChunk().load();
+                Bukkit.getLogger().info("[NpcHandler] Loaded chunk for NPC at " + loc.toString());
+            }
+
+            clearNonNpcZombies(loc);
+            Zombie existingNpc = findExistingNpcAt(loc, customId);
+            if (existingNpc != null) {
+                if (!npcs.contains(existingNpc)) {
+                    configureNpc(existingNpc, loc, customId);
+                    npcs.add(existingNpc);
+                    if (customId != null && !customId.startsWith("auto_")) npcById.put(customId, existingNpc);
+                    Bukkit.getLogger().info("[NpcHandler] Re-added existing NPC at " + loc.toString() + " with ID: " + customId);
                 } else {
-                    spawnNpc(loc, customId);
-                    Bukkit.getLogger().info("NPC at " + loc.toString() + " was missing and has been reloaded.");
+                    Bukkit.getLogger().info("[NpcHandler] NPC already exists at " + loc.toString() + " with ID: " + customId);
                 }
+            } else {
+                spawnNpc(loc, customId);
+                Bukkit.getLogger().info("[NpcHandler] Spawned new NPC at " + loc.toString() + " with ID: " + customId);
             }
         }
         cleanOldNpcs();
     }
 
     private void clearNonNpcZombies(Location loc) {
-        for (Entity entity : loc.getWorld().getNearbyEntities(loc, 1.0, 1.0, 1.0)) {
-            if (entity instanceof Zombie zombie && !zombie.hasMetadata("DarkPixelNPC")) zombie.remove();
+        for (Entity entity : loc.getWorld().getNearbyEntities(loc, 2.0, 2.0, 2.0)) {
+            if (entity instanceof Zombie zombie && !zombie.hasMetadata("DarkPixelNPC")) {
+                zombie.remove();
+                Bukkit.getLogger().info("[NpcHandler] Removed non-NPC zombie at " + loc.toString());
+            }
         }
     }
 
-    private Zombie findExistingNpcAt(Location loc) {
+    private Zombie findExistingNpcAt(Location loc, String customId) {
         for (Entity entity : loc.getWorld().getNearbyEntities(loc, 1.0, 1.0, 1.0)) {
-            if (entity instanceof Zombie zombie && zombie.hasMetadata("DarkPixelNPC")) return zombie;
+            if (entity instanceof Zombie zombie && zombie.hasMetadata("DarkPixelNPC")) {
+                Location npcLoc = zombie.getLocation();
+                if (Math.abs(npcLoc.getX() - loc.getX()) < 0.5 &&
+                        Math.abs(npcLoc.getY() - loc.getY()) < 0.5 &&
+                        Math.abs(npcLoc.getZ() - loc.getZ()) < 0.5) {
+                    String npcId = npcById.entrySet().stream()
+                            .filter(entry -> entry.getValue().equals(zombie))
+                            .map(Map.Entry::getKey)
+                            .findFirst()
+                            .orElse("auto_" + zombie.getEntityId());
+                    if (npcId.equals(customId)) {
+                        return zombie;
+                    }
+                }
+            }
         }
         return null;
     }
@@ -101,6 +135,7 @@ public class NpcHandler implements Listener, CommandExecutor, TabCompleter {
             if (!npc.isValid() || !npc.hasMetadata("DarkPixelNPC")) {
                 npc.remove();
                 toRemove.add(npc);
+                Bukkit.getLogger().info("[NpcHandler] Removed invalid NPC: " + npc.getUniqueId());
             }
         }
         npcs.removeAll(toRemove);
@@ -109,14 +144,20 @@ public class NpcHandler implements Listener, CommandExecutor, TabCompleter {
     }
 
     private void spawnNpc(Location location, String customId) {
-        if (customId != null && npcById.containsKey(customId)) return;
+        if (customId != null && npcById.containsKey(customId)) {
+            Bukkit.getLogger().info("[NpcHandler] NPC with ID " + customId + " already exists, skipping spawn.");
+            return;
+        }
+
         clearNonNpcZombies(location);
-        Zombie oldNpc = findExistingNpcAt(location);
+        Zombie oldNpc = findExistingNpcAt(location, customId);
         if (oldNpc != null) {
             oldNpc.remove();
             npcs.remove(oldNpc);
             npcById.entrySet().removeIf(entry -> entry.getValue().equals(oldNpc));
+            Bukkit.getLogger().info("[NpcHandler] Removed old NPC at " + location.toString());
         }
+
         Zombie npc = (Zombie) location.getWorld().spawnEntity(location, EntityType.ZOMBIE);
         configureNpc(npc, location, customId);
         npcs.add(npc);
@@ -173,8 +214,7 @@ public class NpcHandler implements Listener, CommandExecutor, TabCompleter {
         new BukkitRunnable() {
             @Override
             public void run() {
-                reloadMissingNpcs(); // 检查并重加载缺失的 NPC
-
+                reloadMissingNpcs();
                 for (Zombie npc : new ArrayList<>(npcs)) {
                     if (!npc.isValid() || !npc.hasMetadata("DarkPixelNPC")) {
                         npcs.remove(npc);
@@ -182,11 +222,14 @@ public class NpcHandler implements Listener, CommandExecutor, TabCompleter {
                     }
                     if (npc.hasMetadata("DarkPixelNPCSpawn")) {
                         Location spawnLoc = (Location) npc.getMetadata("DarkPixelNPCSpawn").get(0).value();
-                        if (!npc.getLocation().equals(spawnLoc)) npc.teleport(spawnLoc);
+                        if (!npc.getLocation().equals(spawnLoc)) {
+                            npc.teleport(spawnLoc);
+                            Bukkit.getLogger().info("[NpcHandler] Teleported NPC to " + spawnLoc.toString());
+                        }
                     }
                 }
             }
-        }.runTaskTimer(configManager.getPlugin(), 0L, 300L); // 每 15 秒检查一次 (20 ticks/sec * 15 sec = 300 ticks)
+        }.runTaskTimer(configManager.getPlugin(), 0L, 600L);
     }
 
     private void saveNpcs() {
@@ -204,6 +247,7 @@ public class NpcHandler implements Listener, CommandExecutor, TabCompleter {
             }
         }
         configManager.saveNpcLocations(npcLocations);
+        Bukkit.getLogger().info("[NpcHandler] Saved " + npcLocations.size() + " NPCs to config.");
     }
 
     @EventHandler
@@ -213,6 +257,7 @@ public class NpcHandler implements Listener, CommandExecutor, TabCompleter {
                 npcs.add(zombie);
                 Location spawnLoc = (Location) zombie.getMetadata("DarkPixelNPCSpawn").get(0).value();
                 if (!zombie.getLocation().equals(spawnLoc)) zombie.teleport(spawnLoc);
+                Bukkit.getLogger().info("[NpcHandler] Re-added NPC from chunk load at " + spawnLoc.toString());
             }
         }
     }

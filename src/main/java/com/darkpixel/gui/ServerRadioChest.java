@@ -14,9 +14,14 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 
 public class ServerRadioChest implements Listener, CommandExecutor {
     private final Global context;
+    private final Map<UUID, Long> lastClickTime = new HashMap<>();
+    private static final long CLICK_COOLDOWN = 500;
 
     public ServerRadioChest(Global context) {
         this.context = context;
@@ -53,6 +58,12 @@ public class ServerRadioChest implements Listener, CommandExecutor {
     public void onInventoryClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) return;
         if (!event.getView().getTitle().equals("§l服务器音乐切换箱")) return;
+
+        long currentTime = System.currentTimeMillis();
+        long lastTime = lastClickTime.getOrDefault(player.getUniqueId(), 0L);
+        if (currentTime - lastTime < CLICK_COOLDOWN) return;
+        lastClickTime.put(player.getUniqueId(), currentTime);
+
         event.setCancelled(true);
         ItemStack item = event.getCurrentItem();
         if (item == null || !item.hasItemMeta()) return;

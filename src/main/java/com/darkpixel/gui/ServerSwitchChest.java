@@ -17,9 +17,14 @@ import org.bukkit.inventory.meta.ItemMeta;
 import com.google.common.io.ByteArrayDataOutput;
 import com.google.common.io.ByteStreams;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 
 public class ServerSwitchChest implements Listener, CommandExecutor {
     private final Global context;
+    private final Map<UUID, Long> lastClickTime = new HashMap<>();
+    private static final long CLICK_COOLDOWN = 500;
 
     public ServerSwitchChest(Global context) {
         this.context = context;
@@ -53,8 +58,9 @@ public class ServerSwitchChest implements Listener, CommandExecutor {
 
     private void openSwitchChest(Player player) {
         Inventory inv = Bukkit.createInventory(player, 27, "§l切服箱");
-        inv.setItem(12, createNetherStar());
-        inv.setItem(14, createRedBed());
+        inv.setItem(11, createNetherStar()); // 主城移到11号槽
+        inv.setItem(13, createRedBed());    // 起床战争移到13号槽
+        inv.setItem(15, createTunnelRats()); // Tunnel Rats 添加到15号槽
         player.openInventory(inv);
     }
 
@@ -62,6 +68,12 @@ public class ServerSwitchChest implements Listener, CommandExecutor {
     public void onInventoryClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) return;
         if (!event.getView().getTitle().equals("§l切服箱")) return;
+
+        long currentTime = System.currentTimeMillis();
+        long lastTime = lastClickTime.getOrDefault(player.getUniqueId(), 0L);
+        if (currentTime - lastTime < CLICK_COOLDOWN) return;
+        lastClickTime.put(player.getUniqueId(), currentTime);
+
         event.setCancelled(true);
         ItemStack item = event.getCurrentItem();
         if (item == null || !item.hasItemMeta()) return;
@@ -72,6 +84,9 @@ public class ServerSwitchChest implements Listener, CommandExecutor {
         } else if (itemName.equals("§c起床战争")) {
             switchServer(player, "bedwars");
             player.sendMessage("§a正在切换至起床战争服务器...");
+        } else if (itemName.equals("§dTunnel Rats")) {
+            switchServer(player, "tunnelrats");
+            player.sendMessage("§a正在切换至Tunnel Rats服务器...");
         }
         player.closeInventory();
     }
@@ -99,5 +114,14 @@ public class ServerSwitchChest implements Listener, CommandExecutor {
         meta.setLore(Arrays.asList("§7点击切换至起床战争服务器"));
         redBed.setItemMeta(meta);
         return redBed;
+    }
+
+    private ItemStack createTunnelRats() {
+        ItemStack tunnelRatsItem = new ItemStack(Material.RABBIT_FOOT); //使用兔子脚作为图标
+        ItemMeta meta = tunnelRatsItem.getItemMeta();
+        meta.setDisplayName("§dTunnel Rats");
+        meta.setLore(Arrays.asList("§7点击切换至Tunnel Rats服务器"));
+        tunnelRatsItem.setItemMeta(meta);
+        return tunnelRatsItem;
     }
 }
