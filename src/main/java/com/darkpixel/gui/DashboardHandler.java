@@ -53,10 +53,19 @@ public class DashboardHandler implements Listener, CommandExecutor, TabCompleter
     }
     @Override
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
-        if (!(sender instanceof Player player)) return true;
-        if (cmd.getName().equalsIgnoreCase("dashboard")) {
+        if (!(sender instanceof Player player)) {
+            return true;
+        }
+        if (cmd == null) {
+            return false;
+        }
+        String commandName = cmd.getName();
+        if (commandName == null) {
+            return false;
+        }
+        if (commandName.equalsIgnoreCase("dashboard")) {
             openMainDashboard(player);
-        } else if (cmd.getName().equalsIgnoreCase("hub")) {
+        } else if (commandName.equalsIgnoreCase("hub")) {
             resetPlayerState(player);
             player.performCommand("trigger hub");
             player.sendMessage("§a已返回大厅");

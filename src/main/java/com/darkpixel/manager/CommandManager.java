@@ -27,12 +27,14 @@ public class CommandManager implements CommandExecutor {
         plugin.getCommand("dashboard").setExecutor(context.getDashboard());
         plugin.getCommand("hub").setExecutor(context.getDashboard());
         plugin.getCommand("geiwoqian").setExecutor(this);
-        plugin.getCommand("npc").setExecutor(new NpcHandler(context.getConfigManager(), context.getDashboard()));
+        plugin.getCommand("npc").setExecutor(context.getNpcHandler());
         plugin.getCommand("freeze").setExecutor(context.getPlayerFreeze());
         plugin.getCommand("setchattimes").setExecutor(this);
         plugin.getCommand("sit").setExecutor(this);
         plugin.getCommand("togglesit").setExecutor(this);
         plugin.getCommand("ping").setExecutor(this);
+        plugin.getCommand("getswitchchest").setExecutor(context.getServerSwitchChest());
+        plugin.getCommand("getradio").setExecutor(context.getServerRadioChest());
     }
 
     @Override

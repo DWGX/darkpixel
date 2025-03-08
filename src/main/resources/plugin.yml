@@ -23,7 +23,7 @@ commands:
     usage: /<command>
   npc:
     description: 管理大厅NPC
-    usage: /<command> [clear|remove <id>]
+    usage: /<command> [clear|remove <id>|id <custom_id>|switch|radio]
     permission: darkpixel.npc.manage
   toggleaiwelcome:
     description: 开关AI欢迎功能
@@ -54,6 +54,18 @@ commands:
   report:
     description: Report a player for cheating
     usage: /<command> <player>
+  getswitchchest:
+    description: 获取切服箱
+    usage: /<command>
+    permission: darkpixel.switchchest
+  getradio:
+    description: 获取服务器音乐切换箱
+    usage: /<command>
+    permission: darkpixel.radio
+  reloadconfig:
+    description: Reload all configs
+    usage: /<command>
+    permission: darkpixel.admin
 
 permissions:
   darkpixel.giveblockablesword:
@@ -65,3 +77,9 @@ permissions:
   darkpixel.admin:
     description: 管理员权限
     default: op
+  darkpixel.switchchest:
+    description: 允许使用 /getswitchchest 命令
+    default: true
+  darkpixel.radio:
+    description: 允许使用 /getradio 命令
+    default: true

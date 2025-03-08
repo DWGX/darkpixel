@@ -6,13 +6,26 @@ import com.darkpixel.ai.AiChatHandlerImpl;
 import com.darkpixel.anticheat.AntiCheatHandler;
 import com.darkpixel.combat.bringBackBlocking.BringBackBlocking;
 import com.darkpixel.gui.DashboardHandler;
+import com.darkpixel.gui.ServerSwitchChest;
+import com.darkpixel.gui.ServerRadioChest;
 import com.darkpixel.manager.CommandManager;
 import com.darkpixel.manager.ConfigManager;
-import com.darkpixel.utils.*;
+import com.darkpixel.npc.LobbyZombie;
 import com.darkpixel.npc.NpcHandler;
+import com.darkpixel.npc.RadioChestZombie;
+import com.darkpixel.npc.SwitchChestZombie;
+import com.darkpixel.utils.LoginMessageUtil;
+import com.darkpixel.utils.MotdUtils;
+import com.darkpixel.utils.PlayerData;
+import com.darkpixel.utils.PlayerFreeze;
+import com.darkpixel.utils.SitUtils;
+import com.darkpixel.utils.WorldData;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
-import java.util.concurrent.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 public class Global {
     private final JavaPlugin plugin;
@@ -30,6 +43,11 @@ public class Global {
     private final YamlConfiguration minigameConfig;
     private final YamlConfiguration commandConfig;
     private final AntiCheatHandler antiCheatHandler;
+    private final ServerSwitchChest serverSwitchChest;
+    private final ServerRadioChest serverRadioChest;
+    private final SwitchChestZombie switchChestZombie;
+    private final RadioChestZombie radioChestZombie;
+    private final LobbyZombie lobbyZombie;
     public static final ExecutorService executor = new ThreadPoolExecutor(
             Math.max(2, Runtime.getRuntime().availableProcessors() / 2),
             Runtime.getRuntime().availableProcessors() * 2,
@@ -48,7 +66,12 @@ public class Global {
         this.aiChat = initAiChat();
         this.bringBackBlocking = initBringBackBlocking();
         this.dashboard = initDashboard();
-        this.npcHandler = initNpcHandler();
+        this.serverSwitchChest = new ServerSwitchChest(this);
+        this.serverRadioChest = new ServerRadioChest(this);
+        this.npcHandler = new NpcHandler(configManager, dashboard, serverSwitchChest, serverRadioChest);
+        this.switchChestZombie = new SwitchChestZombie(serverSwitchChest);
+        this.radioChestZombie = new RadioChestZombie(serverRadioChest);
+        this.lobbyZombie = new LobbyZombie(dashboard);
         this.loginMessageUtil = new LoginMessageUtil(this);
         this.playerFreeze = initPlayerFreeze();
         this.motdUtils = new MotdUtils((Main) plugin);
@@ -72,10 +95,6 @@ public class Global {
                 new DashboardHandler(plugin, aiChat, configManager, this) : null;
     }
 
-    private NpcHandler initNpcHandler() {
-        return configManager.getConfig().getBoolean("npc_enabled", true) ? new NpcHandler(configManager, dashboard) : null;
-    }
-
     private PlayerFreeze initPlayerFreeze() {
         return configManager.getConfig().getBoolean("freeze.enabled", true) ? new PlayerFreeze(this) : null;
     }
@@ -89,23 +108,26 @@ public class Global {
         if (enabled && sitUtils == null) {
             sitUtils = new SitUtils(this);
             plugin.getServer().getPluginManager().registerEvents(sitUtils, plugin);
-            plugin.getLogger().info("SitUtils 已动态启用");
         } else if (!enabled && sitUtils != null) {
             sitUtils = null;
-            plugin.getLogger().info("SitUtils 已动态禁用");
         }
     }
 
     private void registerEvents() {
         if (bringBackBlocking != null) plugin.getServer().getPluginManager().registerEvents(bringBackBlocking, plugin);
         plugin.getServer().getPluginManager().registerEvents(new AiChatEvents(aiChat), plugin);
-        if (npcHandler != null) plugin.getServer().getPluginManager().registerEvents(npcHandler, plugin);
+        plugin.getServer().getPluginManager().registerEvents(npcHandler, plugin);
+        plugin.getServer().getPluginManager().registerEvents(switchChestZombie, plugin);
+        plugin.getServer().getPluginManager().registerEvents(radioChestZombie, plugin);
+        plugin.getServer().getPluginManager().registerEvents(lobbyZombie, plugin);
         plugin.getServer().getPluginManager().registerEvents(loginMessageUtil, plugin);
         if (playerFreeze != null) plugin.getServer().getPluginManager().registerEvents(playerFreeze, plugin);
         plugin.getServer().getPluginManager().registerEvents(motdUtils, plugin);
         if (dashboard != null) plugin.getServer().getPluginManager().registerEvents(dashboard, plugin);
         if (sitUtils != null) plugin.getServer().getPluginManager().registerEvents(sitUtils, plugin);
         plugin.getServer().getPluginManager().registerEvents(antiCheatHandler, plugin);
+        plugin.getServer().getPluginManager().registerEvents(serverSwitchChest, plugin);
+        plugin.getServer().getPluginManager().registerEvents(serverRadioChest, plugin);
     }
 
     public JavaPlugin getPlugin() { return plugin; }
@@ -124,4 +146,6 @@ public class Global {
     public MotdUtils getMotdUtils() { return motdUtils; }
     public SitUtils getSitUtils() { return sitUtils; }
     public AntiCheatHandler getAntiCheatHandler() { return antiCheatHandler; }
+    public ServerSwitchChest getServerSwitchChest() { return serverSwitchChest; }
+    public ServerRadioChest getServerRadioChest() { return serverRadioChest; }
 }
