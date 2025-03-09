@@ -42,7 +42,8 @@ public class SitUtils implements Listener {
         if (event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
         for (String block : plugin.getConfigManager().getValidSittingBlocks()) {
             if (event.getClickedBlock().getType().name().toLowerCase().contains(block.toLowerCase())) {
-                sitDown(event.getPlayer(), event.getClickedBlock(), false);
+                sitDown(event.getPlayer(), event.getClickedBlock(), true);
+                break;
             }
         }
     }
@@ -51,17 +52,22 @@ public class SitUtils implements Listener {
     public void onVehicleExit(EntityDismountEvent event) {
         if (!(event.getEntity() instanceof Player player)) return;
         if (event.getDismounted() instanceof ArmorStand stand) {
-            player.teleportAsync(player.getLocation().add(0, 1, 0));
+            Location standLocation = stand.getLocation();
+            Location newLocation = standLocation.clone().add(0, 1.0, 0);
+            newLocation.setYaw(player.getLocation().getYaw());
+            newLocation.setPitch(player.getLocation().getPitch());
+            player.teleportAsync(newLocation);
             stand.remove();
         }
     }
 
     public void sitDown(Player player, Block block, boolean adjustHeight) {
-        Location seatLocation = block.getLocation().add(0.5, 0.5, 0.5);
+        Location seatLocation = block.getLocation().add(0.5, adjustHeight ? 0.3 : 0.5, 0.5);
         ArmorStand seat = (ArmorStand) player.getWorld().spawnEntity(seatLocation, EntityType.ARMOR_STAND);
         seat.setGravity(false);
         seat.setVisible(false);
         seat.setMarker(true);
+        seat.setSmall(true);
         seat.addPassenger(player);
     }
 }

@@ -145,16 +145,19 @@ public class NpcHandler implements Listener, CommandExecutor, TabCompleter {
 
     private void spawnNpc(Location location, String customId) {
         if (customId != null && npcById.containsKey(customId)) {
-            Bukkit.getLogger().info("[NpcHandler] NPC with ID " + customId + " already exists, skipping spawn.");
-            return;
+            Zombie oldNpc = npcById.get(customId);
+            oldNpc.remove();
+            npcs.remove(oldNpc);
+            npcById.remove(customId);
+            Bukkit.getLogger().info("[NpcHandler] Removed conflicting NPC with ID " + customId);
         }
 
         clearNonNpcZombies(location);
-        Zombie oldNpc = findExistingNpcAt(location, customId);
-        if (oldNpc != null) {
-            oldNpc.remove();
-            npcs.remove(oldNpc);
-            npcById.entrySet().removeIf(entry -> entry.getValue().equals(oldNpc));
+        Zombie oldNpcAtLocation = findExistingNpcAt(location, customId);
+        if (oldNpcAtLocation != null) {
+            oldNpcAtLocation.remove();
+            npcs.remove(oldNpcAtLocation);
+            npcById.entrySet().removeIf(entry -> entry.getValue().equals(oldNpcAtLocation));
             Bukkit.getLogger().info("[NpcHandler] Removed old NPC at " + location.toString());
         }
 
@@ -174,8 +177,13 @@ public class NpcHandler implements Listener, CommandExecutor, TabCompleter {
         npc.setInvulnerable(true);
         npc.setMetadata("DarkPixelNPC", new FixedMetadataValue(configManager.getPlugin(), true));
         npc.setMetadata("DarkPixelNPCSpawn", new FixedMetadataValue(configManager.getPlugin(), location.clone()));
-        if ("switchChest".equals(customId)) npc.setMetadata("switchChest", new FixedMetadataValue(configManager.getPlugin(), true));
-        else if ("radioChest".equals(customId)) npc.setMetadata("radioChest", new FixedMetadataValue(configManager.getPlugin(), true));
+        if ("switchChest".equals(customId)) {
+            npc.setCustomName("§a切换服务器NPC");
+            npc.setMetadata("switchChest", new FixedMetadataValue(configManager.getPlugin(), true));
+        } else if ("radioChest".equals(customId)) {
+            npc.setCustomName("§a音乐控制NPC");
+            npc.setMetadata("radioChest", new FixedMetadataValue(configManager.getPlugin(), true));
+        }
     }
 
     private void removeAllNpcs(Player player) {
@@ -282,7 +290,11 @@ public class NpcHandler implements Listener, CommandExecutor, TabCompleter {
     public void onPlayerInteractEntity(PlayerInteractEntityEvent e) {
         if (e.getRightClicked() instanceof Zombie zombie && zombie.hasMetadata("DarkPixelNPC")) {
             Player player = e.getPlayer();
-            if (!zombie.hasMetadata("switchChest") && !zombie.hasMetadata("radioChest")) {
+            if (zombie.hasMetadata("switchChest")) {
+                serverSwitchChest.onCommand(player, null, "getswitchchest", new String[0]);
+            } else if (zombie.hasMetadata("radioChest")) {
+                serverRadioChest.onCommand(player, null, "getradio", new String[0]);
+            } else {
                 if (dashboard != null) {
                     dashboard.openMainDashboard(player);
                 }
