@@ -12,7 +12,7 @@ public class MovementDetector implements Detector {
     private final AntiCheatHandler handler;
 
     public MovementDetector(YamlConfiguration config, AntiCheatHandler handler) {
-        this.maxSpeed = config.getDouble("detectors.movement.max_speed", 0.6);
+        this.maxSpeed = config.getDouble("detectors.movement.max_speed", 15.0);
         this.handler = handler;
     }
 
@@ -28,7 +28,10 @@ public class MovementDetector implements Detector {
             double distance = Math.sqrt(deltaX * deltaX + deltaZ * deltaZ);
             double deltaTime = (timestamp - data.lastMoveTime) / 1000.0;
             double speed = distance / deltaTime;
-            if (speed > maxSpeed) {
+            // 考虑疾跑和速度药水效果
+            double adjustedMaxSpeed = maxSpeed;
+            if (player.isSprinting()) adjustedMaxSpeed *= 1.3;
+            if (speed > adjustedMaxSpeed) {
                 handler.triggerAlert(player, AntiCheatHandler.CheatType.INVALID_MOVEMENT,
                         "Speed: " + String.format("%.2f", speed) + " blocks/s");
             }

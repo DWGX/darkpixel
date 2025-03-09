@@ -80,7 +80,7 @@ public class AntiCheatHandler implements Listener, CommandExecutor, TabCompleter
         config.addDefault("report_window_ms", 300000L);
         config.addDefault("ai_review.trigger_threshold", 5);
         config.addDefault("ai_review.auto_enabled", true);
-        config.addDefault("ai_review.severe_speed_threshold", 10.0);
+        config.addDefault("ai_review.severe_speed_threshold", 15.0);
         config.addDefault("ai_review.severe_bps_threshold", 75.0);
         config.addDefault("alert.frequency", 3);
         config.addDefault("history_retention_days", 30);
@@ -425,15 +425,24 @@ public class AntiCheatHandler implements Listener, CommandExecutor, TabCompleter
     }
 
     private CompletableFuture<String> aiAnalyzeCheat(Player player, CheatType type, String details, int count) {
-        double severeSpeedThreshold = config.getDouble("ai_review.severe_speed_threshold", 10.0);
+        double severeSpeedThreshold = config.getDouble("ai_review.severe_speed_threshold", 15.0);
         double severeBpsThreshold = config.getDouble("ai_review.severe_bps_threshold", 75.0);
         PlayerCheatData data = cheatData.getOrDefault(player.getUniqueId(), new PlayerCheatData());
         double currentBps = data.getAverageBps();
 
+        // 增加玩家的上下文信息
+        String playerContext = String.format(
+                "游戏模式: %s, 飞行: %s, 效果: %s",
+                player.getGameMode(), player.isFlying() ? "是" : "否",
+                player.getActivePotionEffects().stream()
+                        .map(e -> e.getType().getName() + " " + e.getAmplifier())
+                        .collect(Collectors.joining(", "))
+        );
+
         String prompt = String.format(
                 "你是Minecraft服务器的反作弊AI分析助手。请根据以下信息判断玩家是否作弊，并返回 '/ban <player> AI: <理由>' 或 '/monitor <player> AI: <理由>'。\n" +
-                        "玩家: %s\n作弊类型: %s\n详情: %s\n触发次数: %d\n当前BPS: %.2f (严重阈值: %.2f)\n最近10条历史记录:\n%s",
-                player.getName(), type, details, count, currentBps, severeBpsThreshold, getHistorySummary(player.getUniqueId())
+                        "玩家: %s\n作弊类型: %s\n详情: %s\n触发次数: %d\n当前BPS: %.2f (严重阈值: %.2f)\n最近10条历史记录:\n%s\n玩家上下文: %s",
+                player.getName(), type, details, count, currentBps, severeBpsThreshold, getHistorySummary(player.getUniqueId()), playerContext
         );
         aiChat.sendMessage(player, prompt, false);
         return CompletableFuture.supplyAsync(() -> {
@@ -466,11 +475,10 @@ public class AntiCheatHandler implements Listener, CommandExecutor, TabCompleter
         CheatHistoryEntry entry = new CheatHistoryEntry(type, details, System.currentTimeMillis(), aiResponse);
         history.add(entry);
         if (aiResponse.contains("/ban")) {
-            Bukkit.getScheduler().runTask(context.getPlugin(), () -> {
-                player.kickPlayer("§cBanned by AI: " + aiResponse.split("AI:")[1].trim());
-                Bukkit.getServer().getBanList(org.bukkit.BanList.Type.NAME)
-                        .addBan(player.getName(), "AI-detected cheating: " + aiResponse, null, "DarkAC");
-            });
+            // 添加管理员审核步骤
+            Bukkit.getOnlinePlayers().stream()
+                    .filter(Player::isOp)
+                    .forEach(op -> op.sendMessage("§cAI建议禁封 " + player.getName() + "，理由: " + aiResponse + "，请确认"));
         }
     }
 

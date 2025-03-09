@@ -5,7 +5,7 @@ report_window_ms: 300000
 ai_review:
   trigger_threshold: 5
   auto_enabled: true
-  severe_speed_threshold: 10.0
+  severe_speed_threshold: 15.0  # 调整为更合理的速度阈值
   severe_bps_threshold: 75.0
 alert:
   frequency: 3
@@ -14,11 +14,11 @@ detection:
   cooldown_ms: 2000
 detectors:
   reach:
-    max_reach_distance: 6.0
+    max_reach_distance: 6.0  # 保持原值，适用于大多数情况
   head_rotation:
-    max_speed: 200.0
+    max_speed: 200.0  # 保持原值，允许快速转头但防止不自然旋转
   movement:
-    max_speed: 0.8
+    max_speed: 15.0  # 调整为更合理的值，覆盖正常行走（4.3格/秒）和疾跑（5.6格/秒）
   blink:
     max_interval_ms: 200
     trigger_count: 15
@@ -27,13 +27,13 @@ detectors:
     max_hits_per_second: 20.0
   fly_hack:
     max_air_time: 6000
-    max_vertical_speed: 1.0
+    max_vertical_speed: 1.5  # 稍微放宽，允许跳跃增强效果
   speed_hack:
-    max_speed: 1.0
+    max_speed: 15.0  # 调整为更合理的值，覆盖疾跑和速度药水
   auto_clicker:
-    max_cps: 20.0
+    max_cps: 25.0  # 调整为更合理的值，避免误判高水平玩家
     min_variance: 5.0
   click_speed:
-    max_cps: 20.0
+    max_cps: 25.0  # 同上，调整为更合理的值
   vertical_teleport:
-    max_delta_y: 1.5
+    max_delta_y: 10.0  # 调整为更合理的值，允许跳跃增强等合法行为

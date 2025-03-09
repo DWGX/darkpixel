@@ -13,7 +13,7 @@ public class SpeedHackDetector implements Detector {
     private final AntiCheatHandler handler;
 
     public SpeedHackDetector(YamlConfiguration config, AntiCheatHandler handler) {
-        this.maxSpeed = config.getDouble("detectors.speed_hack.max_speed", 0.8);
+        this.maxSpeed = config.getDouble("detectors.speed_hack.max_speed", 15.0);
         this.handler = handler;
     }
 

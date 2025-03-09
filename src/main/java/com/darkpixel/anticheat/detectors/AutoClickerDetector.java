@@ -14,7 +14,7 @@ public class AutoClickerDetector implements Detector {
     private final AntiCheatHandler handler;
 
     public AutoClickerDetector(YamlConfiguration config, AntiCheatHandler handler) {
-        this.maxCps = config.getDouble("detectors.auto_clicker.max_cps", 20.0);
+        this.maxCps = config.getDouble("detectors.auto_clicker.max_cps", 25.0);
         this.minVariance = config.getDouble("detectors.auto_clicker.min_variance", 5.0);
         this.handler = handler;
     }
