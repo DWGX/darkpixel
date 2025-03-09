@@ -18,7 +18,9 @@ public final class Main extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        Global.executor.shutdown();
+        if (context != null) {
+            context.shutdown();
+        }
         try {
             if (!Global.executor.awaitTermination(15, TimeUnit.SECONDS)) {
                 var pendingTasks = Global.executor.shutdownNow();
@@ -40,6 +42,7 @@ public final class Main extends JavaPlugin {
                 return true;
             }
             context.getConfigManager().reloadAllConfigs();
+            context.updateEventRegistrations();
             sender.sendMessage("§a所有配置文件已重新加载！");
             return true;
         }

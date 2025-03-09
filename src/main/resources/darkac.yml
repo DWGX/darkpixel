@@ -14,7 +14,7 @@ detection:
   cooldown_ms: 2000
 detectors:
   reach:
-    max_reach_distance: 6.0  # 保持原值，适用于大多数情况
+    max_reach_distance: 4.5  # 保持原值，适用于大多数情况
   head_rotation:
     max_speed: 200.0  # 保持原值，允许快速转头但防止不自然旋转
   movement:
