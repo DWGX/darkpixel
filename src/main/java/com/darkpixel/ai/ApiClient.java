@@ -9,7 +9,6 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.concurrent.CompletableFuture;
-import org.bukkit.Bukkit;
 
 public class ApiClient {
     private final HttpClient client = HttpClient.newBuilder().build();
@@ -23,20 +22,14 @@ public class ApiClient {
 
     public CompletableFuture<String> chatCompletionAsync(String msg, String model, int maxTokens) {
         return CompletableFuture.supplyAsync(() -> chatCompletion(msg, model, maxTokens))
-                .exceptionally(t -> {
-                    String errorMsg = "§cAPI异常: " + (t != null ? t.getMessage() : "未知错误，请稍后再试");
-                    Bukkit.broadcastMessage(errorMsg); // 公开广播 API 错误
-                    return errorMsg;
-                });
+                .exceptionally(t -> "§cAPI异常: " + (t != null ? t.getMessage() : "未知错误，请稍后再试"));
     }
 
     private String chatCompletion(String msg, String model, int maxTokens) {
         String prompt = config.getSystemPrompt() != null ? config.getSystemPrompt() + "\n对话历史（如果有）:\n" + msg : msg;
         if (prompt == null) {
             context.getPlugin().getLogger().severe("System prompt is null or empty. Please check config.yml!");
-            String errorMsg = "§c系统提示配置为空，请检查 config.yml！";
-            Bukkit.broadcastMessage(errorMsg);
-            return errorMsg;
+            return "§c系统提示配置为空，请检查 config.yml！";
         }
         context.getPlugin().getLogger().info("发送给 API 的完整提示词: " + prompt);
         String[] urls = {"https://api.deepseek.com", "https://api.deepseek.com/v1"};
@@ -63,32 +56,22 @@ public class ApiClient {
                             if (choice != null && choice.has("message")) {
                                 return choice.getAsJsonObject("message").get("content").getAsString();
                             }
-                            String errorMsg = "/say " + config.getAiName() + "API返回格式错误 AI: 请稍后重试";
-                            Bukkit.broadcastMessage(errorMsg);
-                            return errorMsg;
+                            return "/say " + config.getAiName() + "API返回格式错误 AI: 请稍后重试";
                         case 401:
                             context.getPlugin().getLogger().warning("API Key 无效，请检查 config.yml 中的 api_key 配置");
-                            String keyError = "§cAPI Key 无效，请联系服务器管理员！";
-                            Bukkit.broadcastMessage(keyError);
-                            return keyError;
+                            return "§cAPI Key 无效，请联系服务器管理员！";
                         case 402:
-                            String balanceError = "§c余额不足，请联系管理员充值！";
-                            Bukkit.broadcastMessage(balanceError);
-                            return balanceError;
+                            return "§c余额不足，请联系管理员充值！";
                         case 503:
                             context.getPlugin().getLogger().warning("API temporary unavailable (503), retrying... Attempt " + (retry + 1));
                             try {
                                 Thread.sleep(2000 * (retry + 1));
                             } catch (InterruptedException ie) {
-                                String retryError = "§c重试中断，请稍后再试！";
-                                Bukkit.broadcastMessage(retryError);
-                                return retryError;
+                                return "§c重试中断，请稍后再试！";
                             }
                             continue;
                         default:
-                            String statusError = "§cAPI返回状态码 " + resp.statusCode() + "，请稍后再试！";
-                            Bukkit.broadcastMessage(statusError);
-                            return statusError;
+                            return "§cAPI返回状态码 " + resp.statusCode() + "，请稍后再试！";
                     }
                 } catch (Exception e) {
                     context.getPlugin().getLogger().severe("API request failed: " + e.getMessage());
@@ -96,21 +79,15 @@ public class ApiClient {
                         try {
                             Thread.sleep(2000 * (retry + 1));
                         } catch (InterruptedException ie) {
-                            String retryError = "§c重试中断，请稍后再试！";
-                            Bukkit.broadcastMessage(retryError);
-                            return retryError;
+                            return "§c重试中断，请稍后再试！";
                         }
                         continue;
                     }
-                    String failError = "§cAPI连接失败，已重试3次，请联系管理员！";
-                    Bukkit.broadcastMessage(failError);
-                    return failError;
+                    return "§cAPI连接失败，已重试3次，请联系管理员！";
                 }
             }
         }
-        String allFailError = "§c所有API请求均失败，请检查网络或联系管理员！";
-        Bukkit.broadcastMessage(allFailError);
-        return allFailError;
+        return "§c所有API请求均失败，请检查网络或联系管理员！";
     }
 
     private String buildRequestBody(String prompt, String model, int maxTokens) {

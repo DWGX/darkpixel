@@ -2,18 +2,18 @@ package com.darkpixel.anticheat;
 
 import com.darkpixel.Global;
 import com.darkpixel.ai.AiChatHandler;
+import com.darkpixel.anticheat.detectors.*;
 import com.darkpixel.utils.FileUtil;
+import com.darkpixel.utils.LogUtil;
 import com.darkpixel.utils.PlayerData;
 import com.github.retrooper.packetevents.PacketEvents;
 import com.github.retrooper.packetevents.event.PacketListenerAbstract;
 import com.github.retrooper.packetevents.event.PacketListenerPriority;
 import com.github.retrooper.packetevents.event.PacketReceiveEvent;
 import com.github.retrooper.packetevents.protocol.packettype.PacketType;
-import com.github.retrooper.packetevents.protocol.packettype.PacketTypeCommon;
 import com.github.retrooper.packetevents.util.Vector3d;
 import com.github.retrooper.packetevents.wrapper.play.client.*;
 import org.bukkit.Bukkit;
-import org.bukkit.Location;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -29,11 +29,9 @@ import org.bukkit.scheduler.BukkitRunnable;
 
 import java.io.File;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.stream.Collectors;
-
-import com.darkpixel.anticheat.detectors.*; // 正确导入探测器包
 
 public class AntiCheatHandler implements Listener, CommandExecutor, TabCompleter {
     private final Global context;
@@ -43,14 +41,13 @@ public class AntiCheatHandler implements Listener, CommandExecutor, TabCompleter
     private YamlConfiguration config;
     private boolean enabled;
     private boolean alertsEnabled = true;
-    public final Map<UUID, PlayerCheatData> cheatData = new ConcurrentHashMap<>();
+    private final Map<UUID, PlayerCheatData> cheatData = new ConcurrentHashMap<>();
     private final Map<UUID, List<Report>> reports = new ConcurrentHashMap<>();
     private final Map<UUID, Map<CheatType, Integer>> triggerCounts = new ConcurrentHashMap<>();
     private final Map<CheatType, Detector> detectors = new EnumMap<>(CheatType.class);
     private final Map<String, ReportTicket> reportTickets = new ConcurrentHashMap<>();
     private final Map<UUID, Boolean> underAIReview = new ConcurrentHashMap<>();
     private final Map<UUID, List<CheatHistoryEntry>> cheatHistory = new ConcurrentHashMap<>();
-    private final Map<UUID, Double> dynamicThresholds = new ConcurrentHashMap<>();
     private int ticketCounter = 0;
 
     public AntiCheatHandler(Global context) {
@@ -77,9 +74,21 @@ public class AntiCheatHandler implements Listener, CommandExecutor, TabCompleter
 
     private void loadConfig() {
         config = FileUtil.loadOrCreate(configFile, context.getPlugin(), "darkac.yml");
+        config.addDefault("enabled", true);
+        config.addDefault("alerts_enabled", true);
+        config.addDefault("report_threshold", 2);
+        config.addDefault("report_window_ms", 300000L);
+        config.addDefault("ai_review.trigger_threshold", 5);
+        config.addDefault("ai_review.auto_enabled", true);
+        config.addDefault("ai_review.severe_speed_threshold", 15.0);
+        config.addDefault("ai_review.severe_bps_threshold", 75.0);
+        config.addDefault("alert.frequency", 3);
+        config.addDefault("history_retention_days", 30);
+        config.addDefault("detection.cooldown_ms", 2000L);
+        config.options().copyDefaults(true);
+        saveConfig();
         enabled = config.getBoolean("enabled", true);
         alertsEnabled = config.getBoolean("alerts_enabled", true);
-        saveConfig();
     }
 
     private void saveConfig() {
@@ -130,34 +139,13 @@ public class AntiCheatHandler implements Listener, CommandExecutor, TabCompleter
         });
     }
 
-    private void checkAllDetectors(Player player, PlayerCheatData data, long timestamp, double x, double y, double z, float... rotation) {
-        long cooldownMs = config.getLong("detection.cooldown_ms", 3000L);
-        if (timestamp - data.lastPacketTime < cooldownMs) return;
+    private void checkAllDetectors(Player player, PlayerCheatData data, long now, double x, double y, double z, float... rotation) {
+        long cooldownMs = config.getLong("detection.cooldown_ms", 2000L);
+        if (now - data.lastPacketTime < cooldownMs) return;
 
-        double dynamicThreshold = dynamicThresholds.computeIfAbsent(player.getUniqueId(), k -> 1.0);
-        data.updateBehaviorMetrics(x, y, z, timestamp);
-        detectors.values().forEach(detector -> {
-            detector.setDynamicThreshold(dynamicThreshold);
-            detector.check(player, data, timestamp, x, y, z);
-        });
-        if (rotation.length == 2) {
-            detectors.get(CheatType.FAST_HEAD_ROTATION).setDynamicThreshold(dynamicThreshold);
-            detectors.get(CheatType.FAST_HEAD_ROTATION).check(player, data, timestamp, rotation[0], rotation[1]);
-        }
-        data.lastPacketTime = timestamp;
-        adjustDynamicThreshold(player, data);
-    }
-
-    private void adjustDynamicThreshold(Player player, PlayerCheatData data) {
-        double avgMoveSpeed = data.getAverageMoveSpeed();
-        double avgCps = data.getAverageCps();
-        double baseThreshold = 1.0;
-        if (avgMoveSpeed > 0.5 || avgCps > 15) {
-            baseThreshold *= 0.8;
-        } else if (playerData.getPlayerInfo(player.getName()).loginCount > 100) {
-            baseThreshold *= 1.2;
-        }
-        dynamicThresholds.put(player.getUniqueId(), Math.max(0.5, Math.min(2.0, baseThreshold)));
+        detectors.values().forEach(detector -> detector.check(player, data, now, x, y, z));
+        if (rotation.length == 2) detectors.get(CheatType.FAST_HEAD_ROTATION).check(player, data, now, rotation[0], rotation[1]);
+        data.lastPacketTime = now;
     }
 
     private void loadHistory() {
@@ -206,6 +194,7 @@ public class AntiCheatHandler implements Listener, CommandExecutor, TabCompleter
             @Override
             public void run() {
                 saveHistory();
+                LogUtil.info("Anti-cheat history synced");
             }
         }.runTaskTimer(context.getPlugin(), 1200L, 1200L);
     }
@@ -225,17 +214,16 @@ public class AntiCheatHandler implements Listener, CommandExecutor, TabCompleter
         cheatData.remove(uuid);
         reports.remove(uuid);
         underAIReview.remove(uuid);
-        dynamicThresholds.remove(uuid);
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!sender.hasPermission("darkpixel.admin")) {
-            sender.sendMessage("§c没权限！");
+            sender.sendMessage("§cNo permission!");
             return true;
         }
         if (args.length == 0) {
-            sender.sendMessage("§c用法: /darkac <toggle|alert|auto|threshold|status|review|history|ticket>");
+            sender.sendMessage("§cUsage: /darkac <toggle|alert|auto|threshold|status|review|history|ticket>");
             return true;
         }
         switch (args[0].toLowerCase()) {
@@ -243,317 +231,323 @@ public class AntiCheatHandler implements Listener, CommandExecutor, TabCompleter
                 enabled = !enabled;
                 config.set("enabled", enabled);
                 saveConfig();
-                sender.sendMessage("§eDarkAC " + (enabled ? "已启用" : "已禁用"));
+                sender.sendMessage("§eDarkAC " + (enabled ? "enabled" : "disabled"));
                 break;
             case "alert":
                 alertsEnabled = !alertsEnabled;
                 config.set("alerts_enabled", alertsEnabled);
                 saveConfig();
-                sender.sendMessage("§e警报 " + (alertsEnabled ? "已开" : "已关"));
+                sender.sendMessage("§eAlerts " + (alertsEnabled ? "enabled" : "disabled"));
                 break;
             case "auto":
                 boolean autoReviewEnabled = config.getBoolean("ai_review.auto_enabled", true);
                 autoReviewEnabled = !autoReviewEnabled;
                 config.set("ai_review.auto_enabled", autoReviewEnabled);
                 saveConfig();
-                sender.sendMessage("§e自动AI审查 " + (autoReviewEnabled ? "已开" : "已关"));
+                sender.sendMessage("§eAuto AI Review " + (autoReviewEnabled ? "enabled" : "disabled"));
                 break;
             case "threshold":
                 if (args.length != 2) {
-                    sender.sendMessage("§c用法: /darkac threshold <次数>");
+                    sender.sendMessage("§cUsage: /darkac threshold <count>");
                     return true;
                 }
-                int newThreshold = Integer.parseInt(args[1]);
-                config.set("ai_review.trigger_threshold", newThreshold);
-                saveConfig();
-                sender.sendMessage("§eAI审查阈值设为 " + newThreshold);
+                try {
+                    int newThreshold = Integer.parseInt(args[1]);
+                    if (newThreshold < 1) {
+                        sender.sendMessage("§cThreshold must be at least 1!");
+                        return true;
+                    }
+                    config.set("ai_review.trigger_threshold", newThreshold);
+                    saveConfig();
+                    sender.sendMessage("§eAI Review threshold set to " + newThreshold);
+                } catch (NumberFormatException e) {
+                    sender.sendMessage("§cInvalid number: " + args[1]);
+                }
                 break;
             case "status":
-                sender.sendMessage("§eDarkAC: " + (enabled ? "启用" : "禁用") +
-                        ", 警报: " + (alertsEnabled ? "开" : "关") +
-                        ", 自动审查: " + (config.getBoolean("ai_review.auto_enabled", true) ? "开" : "关") +
-                        ", 阈值: " + config.getInt("ai_review.trigger_threshold", 5));
+                sender.sendMessage("§eDarkAC: " + (enabled ? "enabled" : "disabled") +
+                        ", Alerts: " + (alertsEnabled ? "on" : "off") +
+                        ", Auto Review: " + (config.getBoolean("ai_review.auto_enabled", true) ? "on" : "off") +
+                        ", Threshold: " + config.getInt("ai_review.trigger_threshold", 5));
                 break;
             case "review":
                 if (args.length != 2) {
-                    sender.sendMessage("§c用法: /darkac review <玩家>");
+                    sender.sendMessage("§cUsage: /darkac review <player>");
                     return true;
                 }
                 Player target = Bukkit.getPlayer(args[1]);
                 if (target == null) {
-                    sender.sendMessage("§c玩家没找到！");
+                    sender.sendMessage("§cPlayer not found!");
                     return true;
                 }
-                underAIReview.put(target.getUniqueId(), true);
-                aiChat.sendMessage(target, "Reviewing potential cheating behavior for " + target.getName(), false);
-                sender.sendMessage("§e已触发对 " + target.getName() + " 的AI审查");
+                triggerAIReview(target, "MANUAL-" + System.currentTimeMillis(), sender);
                 break;
             case "history":
                 if (args.length != 2) {
-                    sender.sendMessage("§c用法: /darkac history <玩家>");
+                    sender.sendMessage("§cUsage: /darkac history <player>");
                     return true;
                 }
-                Player historyTarget = Bukkit.getPlayer(args[1]);
-                if (historyTarget == null) {
-                    sender.sendMessage("§c玩家没找到！");
+                UUID histUuid = Bukkit.getPlayerUniqueId(args[1]);
+                if (histUuid == null) {
+                    sender.sendMessage("§cPlayer not found!");
                     return true;
                 }
-                List<CheatHistoryEntry> history = cheatHistory.getOrDefault(historyTarget.getUniqueId(), new ArrayList<>());
-                if (history.isEmpty()) {
-                    sender.sendMessage("§e玩家 " + historyTarget.getName() + " 无作弊记录");
-                } else {
-                    history.forEach(entry -> sender.sendMessage("§e[" + entry.timestamp + "] " + entry.type.getName() + ": " + entry.details));
+                List<CheatHistoryEntry> history = cheatHistory.getOrDefault(histUuid, Collections.emptyList());
+                sender.sendMessage("§eCheat History for " + args[1] + ":");
+                history.forEach(entry -> sender.sendMessage(
+                        String.format("§7[%s] %s: %s - AI: %s", new Date(entry.timestamp), entry.type, entry.details, entry.aiResponse)
+                ));
+                break;
+            case "ticket":
+                if (args.length != 2) {
+                    sender.sendMessage("§cUsage: /darkac ticket <ticketId>");
+                    return true;
                 }
+                showTicketDetails(sender, args[1]);
                 break;
             default:
-                sender.sendMessage("§c用法: /darkac <toggle|alert|auto|threshold|status|review|history|ticket>");
+                sender.sendMessage("§cUnknown command!");
         }
         return true;
     }
 
     @Override
-    public List<String> onTabComplete(CommandSender sender, Command command, String label, String[] args) {
-        List<String> suggestions = new ArrayList<>();
+    public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
+        if (!sender.hasPermission("darkpixel.admin")) return Collections.emptyList();
+        List<String> options = new ArrayList<>();
         if (args.length == 1) {
-            suggestions.addAll(Arrays.asList("toggle", "alert", "auto", "threshold", "status", "review", "history", "ticket"));
-        } else if (args.length == 2 && Arrays.asList("review", "history").contains(args[0].toLowerCase())) {
-            Bukkit.getOnlinePlayers().forEach(p -> suggestions.add(p.getName()));
+            options.addAll(Arrays.asList("toggle", "alert", "auto", "threshold", "status", "review", "history", "ticket"));
+        } else if (args.length == 2) {
+            switch (args[0].toLowerCase()) {
+                case "review":
+                case "history":
+                    return Bukkit.getOnlinePlayers().stream().map(Player::getName).collect(Collectors.toList());
+                case "ticket":
+                    return new ArrayList<>(config.getConfigurationSection("report_tickets").getKeys(false));
+                case "threshold":
+                    return Arrays.asList("3", "5", "10", "15");
+            }
         }
-        return suggestions;
+        return options.stream().filter(opt -> opt.startsWith(args[args.length - 1].toLowerCase())).collect(Collectors.toList());
+    }
+
+    private void showTicketDetails(CommandSender sender, String ticketId) {
+        ConfigurationSection ticket = config.getConfigurationSection("report_tickets." + ticketId);
+        if (ticket == null) {
+            sender.sendMessage("§cTicket not found!");
+            return;
+        }
+        sender.sendMessage("§eTicket " + ticketId + ":");
+        sender.sendMessage("§7Target: " + ticket.getString("target"));
+        sender.sendMessage("§7Reporter: " + ticket.getString("reporter"));
+        sender.sendMessage("§7Time: " + new Date(ticket.getLong("timestamp")));
+        sender.sendMessage("§7Reviewed: " + ticket.getBoolean("reviewed", false));
+        sender.sendMessage("§7Status: " + ticket.getString("status"));
+        if (ticket.contains("ai_response")) sender.sendMessage("§7AI Response: " + ticket.getString("ai_response"));
     }
 
     private void startReportCheck() {
         new BukkitRunnable() {
             @Override
             public void run() {
-                reports.forEach((uuid, reportList) -> {
-                    if (reportList.size() >= config.getInt("report_threshold", 3)) {
-                        Player player = Bukkit.getPlayer(uuid);
-                        if (player != null && !underAIReview.getOrDefault(uuid, false)) {
-                            underAIReview.put(uuid, true);
-                            aiChat.sendMessage(player, "Multiple reports received, reviewing behavior for " + player.getName(), false);
-                        }
-                    }
+                long now = System.currentTimeMillis();
+                reports.entrySet().removeIf(entry -> {
+                    entry.getValue().removeIf(r -> now - r.getTimestamp() > config.getLong("report_window_ms"));
+                    return entry.getValue().isEmpty();
                 });
             }
-        }.runTaskTimer(context.getPlugin(), 1200L, 1200L);
+        }.runTaskTimer(context.getPlugin(), 0L, 200L);
     }
 
     private void startBpsCheck() {
         new BukkitRunnable() {
             @Override
             public void run() {
-                cheatData.forEach((uuid, data) -> {
-                    data.cleanupOldTimestamps();
-                });
+                if (!enabled) return;
+                for (Player player : Bukkit.getOnlinePlayers()) {
+                    PlayerCheatData data = cheatData.getOrDefault(player.getUniqueId(), new PlayerCheatData());
+                    double bps = data.getAverageBps();
+                    double severeBpsThreshold = config.getDouble("ai_review.severe_bps_threshold", 75.0);
+                    if (bps > severeBpsThreshold) {
+                        triggerAlert(player, CheatType.BLINK, "BPS: " + String.format("%.2f", bps));
+                    }
+                }
             }
-        }.runTaskTimer(context.getPlugin(), 1200L, 1200L);
-    }
-
-    public void addReport(Player target, Player reporter) {
-        List<Report> targetReports = reports.computeIfAbsent(target.getUniqueId(), k -> new ArrayList<>());
-        targetReports.add(new Report(reporter.getName(), "Suspected cheating", System.currentTimeMillis()));
+        }.runTaskTimer(context.getPlugin(), 0L, 60L);
     }
 
     public void triggerAlert(Player player, CheatType type, String details) {
-        if (!alertsEnabled) return;
+        if (!enabled) return;
+
         UUID uuid = player.getUniqueId();
-        Map<CheatType, Integer> playerTriggers = triggerCounts.computeIfAbsent(uuid, k -> new HashMap<>());
-        int count = playerTriggers.merge(type, 1, Integer::sum);
+        PlayerCheatData data = cheatData.get(uuid);
+        if (data == null) return;
+
         long now = System.currentTimeMillis();
+        long cooldownMs = config.getLong("detection.cooldown_ms", 2000L);
+        if (now - data.lastAlertTime < cooldownMs) return;
 
-        if (now - cheatData.get(uuid).lastAlertTime > 5000) {
-            String message = "§c[DarkAC] " + player.getName() + " 疑似使用 " + type.getName() + ": " + details + " (触发次数: " + count + ")";
+        Map<CheatType, Integer> counts = triggerCounts.computeIfAbsent(uuid, k -> new HashMap<>());
+        int violationCount = counts.merge(type, 1, Integer::sum);
+
+        data.lastAlertTime = now;
+
+        if (!alertsEnabled) {
+            logCheat(player, type, details, "Alerts disabled");
+            return;
+        }
+
+        int aiReviewThreshold = config.getInt("ai_review.trigger_threshold", 5);
+        int alertFrequency = config.getInt("alert.frequency", 3);
+        boolean autoReviewEnabled = config.getBoolean("ai_review.auto_enabled", true);
+
+        if (violationCount % alertFrequency == 0) {
+            String alertMessage = String.format("[DarkAC] %s triggered %s: %s (x%d)",
+                    player.getName(), type, details, violationCount);
             Bukkit.getOnlinePlayers().stream()
-                    .filter(p -> p.hasPermission("darkpixel.admin"))
-                    .forEach(p -> p.sendMessage(message));
-            cheatHistory.computeIfAbsent(uuid, k -> new ArrayList<>())
-                    .add(new CheatHistoryEntry(type, details, now, "Pending AI review"));
-            cheatData.get(uuid).lastAlertTime = now;
+                    .filter(Player::isOp)
+                    .forEach(op -> op.sendMessage("§e" + alertMessage));
+            LogUtil.warning(alertMessage);
+            logCheat(player, type, details, "Pending review");
+        }
 
-            int threshold = config.getInt("ai_review.trigger_threshold", 5);
-            if (count >= threshold && !underAIReview.getOrDefault(uuid, false)) {
-                underAIReview.put(uuid, true);
-                aiChat.sendMessage(player, "Behavior review triggered for " + player.getName() + " due to " + type.getName(), false);
-            }
+        if (autoReviewEnabled && violationCount >= aiReviewThreshold && !underAIReview.getOrDefault(uuid, false)) {
+            String ticketId = String.format("AUTO-%s-%d", type.name(), System.currentTimeMillis());
+            String reviewMessage = String.format("[DarkAC] %s triggered %s: %s (x%d) - Starting AI Review (%s)",
+                    player.getName(), type, details, violationCount, ticketId);
+            Bukkit.getOnlinePlayers().stream()
+                    .filter(Player::isOp)
+                    .forEach(op -> op.sendMessage("§e" + reviewMessage));
+            LogUtil.warning(reviewMessage);
+            triggerAIReview(player, ticketId, null);
+            counts.put(type, 0);
         }
     }
 
-    public enum CheatType {
-        FAST_HEAD_ROTATION("Fast Head Rotation"),
-        HIGH_CPS("High Click Speed"),
-        INVALID_MOVEMENT("Invalid Movement"),
-        VERTICAL_TELEPORT("Vertical Teleport"),
-        BLINK("Blink Detected"),
-        KILLAURA("KillAura Detected"),
-        REACH("Reach Hack Detected"),
-        AUTO_CLICKER("Auto Clicker Detected"),
-        FLY_HACK("Fly Hack Detected"),
-        SPEED_HACK("Speed Hack Detected");
+    private CompletableFuture<String> aiAnalyzeCheat(Player player, CheatType type, String details, int count) {
+        double severeSpeedThreshold = config.getDouble("ai_review.severe_speed_threshold", 15.0);
+        double severeBpsThreshold = config.getDouble("ai_review.severe_bps_threshold", 75.0);
+        PlayerCheatData data = cheatData.getOrDefault(player.getUniqueId(), new PlayerCheatData());
+        double currentBps = data.getAverageBps();
 
-        private final String name;
+        // 增加玩家的上下文信息
+        String playerContext = String.format(
+                "游戏模式: %s, 飞行: %s, 效果: %s",
+                player.getGameMode(), player.isFlying() ? "是" : "否",
+                player.getActivePotionEffects().stream()
+                        .map(e -> e.getType().getName() + " " + e.getAmplifier())
+                        .collect(Collectors.joining(", "))
+        );
 
-        CheatType(String name) {
-            this.name = name;
-        }
-
-        public String getName() {
-            return name;
-        }
-    }
-
-    public interface Detector {
-        void check(Player player, PlayerCheatData data, long timestamp, double x, double y, double z);
-        void check(Player player, PlayerCheatData data, long timestamp, float yaw, float pitch);
-        void setDynamicThreshold(double threshold);
-    }
-
-    public static class PlayerCheatData {
-        public Float lastYaw = null;
-        public Float lastPitch = null;
-        public Location lastLocation = null;
-        public long lastPacketTime = 0;
-        public long lastMoveTime = 0;
-        public long lastHitTime = 0;
-        public long lastAlertTime = 0;
-        public int blinkCount = 0;
-        public ConcurrentLinkedDeque<Long> clickTimes = new ConcurrentLinkedDeque<>();
-        public ConcurrentLinkedDeque<Long> packetTimestamps = new ConcurrentLinkedDeque<>();
-        public Map<PacketTypeCommon, Integer> packetCounts = new HashMap<>();
-        public int totalPackets = 0;
-        public int anomalyCount = 0;
-        public long lastGroundTime = 0;
-        public double lastVerticalSpeed = 0.0;
-        public List<Double> moveSpeeds = Collections.synchronizedList(new ArrayList<>());
-        public List<Long> clickTimestamps = Collections.synchronizedList(new ArrayList<>());
-
-        public void incrementPacketCount(PacketTypeCommon type) {
-            packetCounts.merge(type, 1, Integer::sum);
-            totalPackets++;
-        }
-
-        public double getAverageBps() {
-            long now = System.currentTimeMillis();
-            packetTimestamps.removeIf(t -> now - t > 5000);
-            return packetTimestamps.isEmpty() ? 0.0 : packetTimestamps.size() / 5.0;
-        }
-
-        public double getPeakBps() {
-            long now = System.currentTimeMillis();
-            Map<Long, Integer> secondCounts = new HashMap<>();
-            for (long timestamp : packetTimestamps) {
-                long second = (now - timestamp) / 1000;
-                secondCounts.merge(second, 1, Integer::sum);
-            }
-            return secondCounts.values().stream().max(Integer::compare).orElse(0);
-        }
-
-        public void cleanupOldTimestamps() {
-            long now = System.currentTimeMillis();
-            packetTimestamps.removeIf(ts -> now - ts > 60000);
-            clickTimestamps.removeIf(ts -> now - ts > 60000);
-            moveSpeeds.removeIf(speed -> moveSpeeds.indexOf(speed) < moveSpeeds.size() - 100);
-        }
-
-        public void updateBehaviorMetrics(double x, double y, double z, long timestamp) {
-            if (lastMoveTime > 0 && lastLocation != null) {
-                double distance = Math.sqrt(Math.pow(x - lastLocation.getX(), 2) + Math.pow(y - lastLocation.getY(), 2) + Math.pow(z - lastLocation.getZ(), 2));
-                double timeDiff = (timestamp - lastMoveTime) / 1000.0;
-                if (timeDiff > 0) {
-                    double speed = distance / timeDiff;
-                    moveSpeeds.add(speed);
+        String prompt = String.format(
+                "你是Minecraft服务器的反作弊AI分析助手。请根据以下信息判断玩家是否作弊，并返回 '/ban <player> AI: <理由>' 或 '/monitor <player> AI: <理由>'。\n" +
+                        "玩家: %s\n作弊类型: %s\n详情: %s\n触发次数: %d\n当前BPS: %.2f (严重阈值: %.2f)\n最近10条历史记录:\n%s\n玩家上下文: %s",
+                player.getName(), type, details, count, currentBps, severeBpsThreshold, getHistorySummary(player.getUniqueId()), playerContext
+        );
+        aiChat.sendMessage(player, prompt, false);
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                Thread.sleep(1000); // 模拟AI处理延迟
+                int threshold = config.getInt("ai_review.trigger_threshold", 5);
+                boolean isSevere = count >= threshold * 2 || currentBps > severeBpsThreshold;
+                if (isSevere) {
+                    return "/ban " + player.getName() + " AI: Repeated severe violations or excessive BPS detected";
                 }
+                return "/monitor " + player.getName() + " AI: Suspicious activity detected, further monitoring required";
+            } catch (InterruptedException e) {
+                return "/monitor " + player.getName() + " AI: Analysis interrupted";
             }
-            lastMoveTime = timestamp;
-            lastLocation = new Location(Bukkit.getWorlds().get(0), x, y, z);
-        }
+        });
+    }
 
-        public double getAverageMoveSpeed() {
-            if (moveSpeeds.isEmpty()) return 0.0;
-            return moveSpeeds.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
-        }
+    private String getHistorySummary(UUID uuid) {
+        List<CheatHistoryEntry> history = cheatHistory.getOrDefault(uuid, Collections.emptyList());
+        return history.stream()
+                .sorted((e1, e2) -> Long.compare(e2.timestamp, e1.timestamp))
+                .limit(10)
+                .map(e -> String.format("%s: %s (%s)", e.type, e.details, new Date(e.timestamp)))
+                .collect(Collectors.joining("\n"));
+    }
 
-        public double getAverageCps() {
-            if (clickTimestamps.isEmpty()) return 0.0;
-            long now = System.currentTimeMillis();
-            long window = 1000L;
-            long count = clickTimestamps.stream().filter(ts -> now - ts <= window).count();
-            return count;
+    private void logCheat(Player player, CheatType type, String details, String aiResponse) {
+        UUID uuid = player.getUniqueId();
+        List<CheatHistoryEntry> history = cheatHistory.computeIfAbsent(uuid, k -> new ArrayList<>());
+        CheatHistoryEntry entry = new CheatHistoryEntry(type, details, System.currentTimeMillis(), aiResponse);
+        history.add(entry);
+        if (aiResponse.contains("/ban")) {
+            // 添加管理员审核步骤
+            Bukkit.getOnlinePlayers().stream()
+                    .filter(Player::isOp)
+                    .forEach(op -> op.sendMessage("§cAI建议禁封 " + player.getName() + "，理由: " + aiResponse + "，请确认"));
         }
     }
 
-    public static class ReportCommand implements CommandExecutor {
-        private final AntiCheatHandler handler;
-        private final Map<UUID, Long> cooldowns = new HashMap<>();
-        private static final long COOLDOWN_TIME = 30000L;
+    public void addReport(Player target, Player reporter) {
+        UUID targetUUID = target.getUniqueId();
+        List<Report> targetReports = reports.computeIfAbsent(targetUUID, k -> new ArrayList<>());
+        targetReports.add(new Report(reporter.getUniqueId(), System.currentTimeMillis()));
+        String ticketId = String.format("T%06d", ticketCounter++);
+        saveReportTicket(ticketId, targetUUID, reporter.getUniqueId(), false);
+        Bukkit.getOnlinePlayers().stream()
+                .filter(Player::isOp)
+                .forEach(op -> op.sendMessage("§eNew report ticket " + ticketId + ": " + reporter.getName() + " reported " + target.getName()));
 
-        public ReportCommand(AntiCheatHandler handler) {
-            this.handler = handler;
-            startCooldownCleanup();
+        int reportThreshold = config.getInt("report_threshold", 2);
+        if (targetReports.size() >= reportThreshold) {
+            triggerAIReview(target, "REPORT-" + ticketId, null);
         }
+    }
 
-        @Override
-        public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-            if (!(sender instanceof Player player)) {
-                sender.sendMessage("§c仅玩家可使用此命令！");
-                return true;
-            }
-            if (args.length != 1) {
-                sender.sendMessage("§c用法: /report <玩家名>");
-                return true;
-            }
-            Player target = Bukkit.getPlayer(args[0]);
-            if (target == null) {
-                sender.sendMessage("§c玩家 " + args[0] + " 不在线！");
-                return true;
-            }
-            if (target.equals(player)) {
-                sender.sendMessage("§c不能举报自己！");
-                return true;
-            }
-            UUID uuid = player.getUniqueId();
-            long now = System.currentTimeMillis();
-            if (cooldowns.containsKey(uuid) && (now - cooldowns.get(uuid)) < COOLDOWN_TIME) {
-                long remaining = (COOLDOWN_TIME - (now - cooldowns.get(uuid))) / 1000;
-                player.sendMessage("§c请等待 " + remaining + " 秒后再举报！");
-                return true;
-            }
-            cooldowns.put(uuid, now);
-            handler.addReport(target, player);
-            player.sendMessage("§a已举报 " + target.getName() + "！若多人举报，将触发AI审查。");
-            notifyAdmins(player, target);
-            return true;
+    private void saveReportTicket(String ticketId, UUID target, UUID reporter, boolean reviewed) {
+        Map<String, Object> ticket = new HashMap<>();
+        ticket.put("target", target.toString());
+        ticket.put("reporter", reporter.toString());
+        ticket.put("timestamp", System.currentTimeMillis());
+        ticket.put("reviewed", reviewed);
+        ticket.put("status", "pending");
+        config.set("report_tickets." + ticketId, ticket);
+        reportTickets.put(ticketId, new ReportTicket(target, reporter));
+        saveConfig();
+    }
+
+    private void triggerAIReview(Player player, String ticketId, CommandSender initiator) {
+        UUID uuid = player.getUniqueId();
+        if (underAIReview.getOrDefault(uuid, false)) {
+            LogUtil.info("AI review already in progress for " + player.getName());
+            return;
         }
+        underAIReview.put(uuid, true);
+        String message = "§cAI Review triggered for " + player.getName() + " (Ticket: " + ticketId + ")";
+        if (initiator != null) initiator.sendMessage(message);
+        else Bukkit.getOnlinePlayers().stream().filter(Player::isOp).forEach(op -> op.sendMessage(message));
 
-        private void notifyAdmins(Player reporter, Player target) {
-            new BukkitRunnable() {
-                @Override
-                public void run() {
-                    for (Player admin : Bukkit.getOnlinePlayers()) {
-                        if (admin.hasPermission("darkpixel.admin") && !admin.equals(reporter)) {
-                            admin.sendMessage("§e" + reporter.getName() + " 举报了 " + target.getName() + "，请注意观察。");
-                        }
+        Map<CheatType, Integer> counts = triggerCounts.getOrDefault(uuid, Collections.emptyMap());
+        int totalViolations = counts.values().stream().mapToInt(Integer::intValue).sum();
+
+        aiAnalyzeCheat(player, CheatType.REPORT, "Automated review triggered", totalViolations)
+                .thenAccept(response -> {
+                    ConfigurationSection ticket = config.getConfigurationSection("report_tickets." + ticketId);
+                    if (ticket != null) {
+                        ticket.set("reviewed", true);
+                        ticket.set("status", response.contains("/ban") ? "BANNED" : "MONITORED");
+                        ticket.set("ai_response", response);
+                        ticket.set("review_timestamp", System.currentTimeMillis());
                     }
-                }
-            }.runTaskAsynchronously(handler.getContext().getPlugin());
-        }
+                    saveConfig();
 
-        private void startCooldownCleanup() {
-            new BukkitRunnable() {
-                @Override
-                public void run() {
-                    long now = System.currentTimeMillis();
-                    cooldowns.entrySet().removeIf(entry -> (now - entry.getValue()) >= COOLDOWN_TIME);
-                }
-            }.runTaskTimer(handler.getContext().getPlugin(), 0L, 600L);
-        }
+                    logCheat(player, CheatType.REPORT, "Reviewed by AI (Ticket: " + ticketId + ")", response);
+                    String result = "§eAI Review Result for " + player.getName() + ": " + response;
+                    if (initiator != null) initiator.sendMessage(result);
+                    else Bukkit.getOnlinePlayers().stream().filter(Player::isOp).forEach(op -> op.sendMessage(result));
+                    underAIReview.remove(uuid);
+                });
     }
 
-    public static class CheatHistoryEntry {
-        CheatType type;
-        String details;
-        long timestamp;
-        String aiResponse;
+    static class CheatHistoryEntry {
+        final CheatType type;
+        final String details;
+        final long timestamp;
+        final String aiResponse;
 
         CheatHistoryEntry(CheatType type, String details, long timestamp, String aiResponse) {
             this.type = type;
@@ -563,27 +557,32 @@ public class AntiCheatHandler implements Listener, CommandExecutor, TabCompleter
         }
     }
 
-    public static class Report {
-        String reporter;
-        String reason;
-        long timestamp;
+    static class Report {
+        private final UUID reporter;
+        private final long timestamp;
 
-        Report(String reporter, String reason, long timestamp) {
+        Report(UUID reporter, long timestamp) {
             this.reporter = reporter;
-            this.reason = reason;
             this.timestamp = timestamp;
+        }
+
+        public long getTimestamp() {
+            return timestamp;
         }
     }
 
-    public static class ReportTicket {
-        String ticketId;
-        UUID playerId;
-        String reason;
+    static class ReportTicket {
+        final UUID target;
+        final UUID reporter;
 
-        ReportTicket(String ticketId, UUID playerId, String reason) {
-            this.ticketId = ticketId;
-            this.playerId = playerId;
-            this.reason = reason;
+        ReportTicket(UUID target, UUID reporter) {
+            this.target = target;
+            this.reporter = reporter;
         }
+    }
+
+    public enum CheatType {
+        FAST_HEAD_ROTATION, HIGH_CPS, INVALID_MOVEMENT, VERTICAL_TELEPORT, BLINK,
+        KILLAURA, REACH, AUTO_CLICKER, FLY_HACK, SPEED_HACK, REPORT
     }
 }

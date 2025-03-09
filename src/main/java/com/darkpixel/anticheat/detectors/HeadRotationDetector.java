@@ -1,15 +1,14 @@
 package com.darkpixel.anticheat.detectors;
 
 import com.darkpixel.anticheat.AntiCheatHandler;
-import com.darkpixel.anticheat.AntiCheatHandler.Detector;
-import com.darkpixel.anticheat.AntiCheatHandler.PlayerCheatData;
+import com.darkpixel.anticheat.Detector;
+import com.darkpixel.anticheat.PlayerCheatData;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 
 public class HeadRotationDetector implements Detector {
     private final double maxSpeed;
     private final AntiCheatHandler handler;
-    private double dynamicThreshold = 1.0;
 
     public HeadRotationDetector(YamlConfiguration config, AntiCheatHandler handler) {
         this.maxSpeed = config.getDouble("detectors.head_rotation.max_speed", 200.0);
@@ -17,10 +16,9 @@ public class HeadRotationDetector implements Detector {
     }
 
     @Override
-    public void check(Player player, PlayerCheatData data, long timestamp, double x, double y, double z) {}
-
-    @Override
-    public void check(Player player, PlayerCheatData data, long timestamp, float yaw, float pitch) {
+    public void check(Player player, PlayerCheatData data, long timestamp, double... args) {
+        float yaw = (float) args[0];
+        float pitch = (float) args[1];
         if (data.lastYaw != null && data.lastPitch != null && data.lastPacketTime > 0) {
             double deltaYaw = Math.abs(normalizeAngle(yaw - data.lastYaw));
             double deltaPitch = Math.abs(normalizeAngle(pitch - data.lastPitch));
@@ -31,7 +29,7 @@ public class HeadRotationDetector implements Detector {
             double yawSpeed = deltaYaw / deltaTime;
             double pitchSpeed = deltaPitch / deltaTime;
 
-            if (yawSpeed > maxSpeed * dynamicThreshold || pitchSpeed > maxSpeed * dynamicThreshold) {
+            if (yawSpeed > maxSpeed || pitchSpeed > maxSpeed) {
                 handler.triggerAlert(player, AntiCheatHandler.CheatType.FAST_HEAD_ROTATION,
                         "Yaw Speed: " + String.format("%.2f", yawSpeed) + ", Pitch Speed: " + String.format("%.2f", pitchSpeed));
             }
@@ -39,11 +37,6 @@ public class HeadRotationDetector implements Detector {
         data.lastYaw = yaw;
         data.lastPitch = pitch;
         data.lastPacketTime = timestamp;
-    }
-
-    @Override
-    public void setDynamicThreshold(double threshold) {
-        this.dynamicThreshold = threshold;
     }
 
     private float normalizeAngle(float angle) {

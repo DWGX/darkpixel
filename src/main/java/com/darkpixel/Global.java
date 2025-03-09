@@ -130,16 +130,6 @@ public class Global {
         plugin.getServer().getPluginManager().registerEvents(serverRadioChest, plugin);
     }
 
-    public void updateEventRegistrations() {
-        registerEvents();
-    }
-    public void shutdown() {
-        if (aiChat != null) {
-            aiChat.shutdown();
-        }
-        executor.shutdown();
-    }
-
     public JavaPlugin getPlugin() { return plugin; }
     public ConfigManager getConfigManager() { return configManager; }
     public YamlConfiguration getConfig() { return configManager.getConfig(); }
