@@ -13,7 +13,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
-import java.util.regex.Pattern;
 
 public class AiChatHandlerImpl implements AiChatHandler {
     private final ConfigManager config;
@@ -224,14 +223,14 @@ public class AiChatHandlerImpl implements AiChatHandler {
         Global.executor.submit(() -> {
             try {
                 api.chatCompletionAsync(prompt, "deepseek-reasoner", 2000).thenAccept(resp -> {
-                    String finalResp = resp != null && !resp.trim().isEmpty() && resp.startsWith("/") ? resp : generateCreativeResponse(player, originalMessage);
+                    String finalResp = validateCommand(resp) ? resp : "/say " + aiName + " 无法生成有效命令\nAI: 请说得更清楚点！";
                     Bukkit.getScheduler().runTask(config.getPlugin(), () -> {
                         chatHistory.addMessage(name, aiName + ": " + finalResp);
                         Bukkit.broadcastMessage("§c[AI管理员广播] " + name + ": " + originalMessage);
                         executeCommands(finalResp, name, player);
                     });
                 }).exceptionally(throwable -> {
-                    String fallbackResp = "/say " + aiName + " 请求失败 AI: 出错了，稍后再试吧！";
+                    String fallbackResp = "/say " + aiName + " 请求失败\nAI: 出错了，稍后再试！";
                     Bukkit.getScheduler().runTask(config.getPlugin(), () -> {
                         chatHistory.addMessage(name, aiName + ": " + fallbackResp);
                         Bukkit.broadcastMessage("§c[AI管理员广播] " + name + ": " + originalMessage);
@@ -241,7 +240,7 @@ public class AiChatHandlerImpl implements AiChatHandler {
                     return null;
                 });
             } catch (Exception e) {
-                String fallbackResp = "/say " + aiName + " 处理失败 AI: 请联系管理员！";
+                String fallbackResp = "/say " + aiName + " 处理失败\nAI: 请联系管理员！";
                 Bukkit.getScheduler().runTask(config.getPlugin(), () -> {
                     chatHistory.addMessage(name, aiName + ": " + fallbackResp);
                     Bukkit.broadcastMessage("§c[AI管理员广播] " + name + ": " + originalMessage);
@@ -252,54 +251,31 @@ public class AiChatHandlerImpl implements AiChatHandler {
         });
     }
 
-    private String generateCreativeResponse(Player player, String originalMessage) {
-        String name = player.getName();
-        PlayerData.PlayerInfo playerInfo = context.getPlayerData().getPlayerInfo(name);
-        String playerContext = buildPlayerContext(player, playerInfo);
-        String inventory = playerInfo.getInventoryDescription();
-        String effects = playerInfo.getEffectsDescription();
-        String worldResources = context.getWorldData().analyzeWorld(player.getWorld());
-        String historySummary = getHistorySummary(name);
-        String enhancedPrompt = "你是一个Minecraft 1.21.4服务器AI助手，名字叫“" + aiName + "”。根据玩家输入和上下文，生成任意Minecraft命令（每行以 / 开头，多行以 \\n 分隔，最后附 'AI: <简短回复>'）。你的目标是自由发挥创意，生成简单或高级的内容，例如：简单命令（如 /give 物品），或高级逻辑（如生成建筑、红石装置、随机事件）。必须始终返回命令形式，不允许返回纯文本或‘无法理解’。根据玩家状态、背包、世界资源和历史记录自主决定内容。\n" +
-                "玩家状态: " + (playerContext != null ? playerContext : "未知玩家状态") + "\n" +
-                "历史摘要: " + historySummary + "\n" +
-                "背包: " + (inventory != null ? inventory : "背包未知") + "\n" +
-                "效果: " + (effects != null ? effects : "无效果") + "\n" +
-                "世界资源: " + (worldResources != null ? worldResources : "世界资源未知") + "\n" +
-                "当前输入: " + (originalMessage.isEmpty() ? "玩家未提供具体要求，请自由发挥" : originalMessage);
-        try {
-            String result = api.chatCompletionAsync(enhancedPrompt, "deepseek-reasoner", 2000).join();
-            if (result == null || result.trim().isEmpty() || !result.startsWith("/")) {
-                Random rand = new Random();
-                if (originalMessage.isEmpty() || originalMessage.length() < 5) {
-                    return "/give " + name + " minecraft:golden_apple 3\nAI: 给你点金苹果，尝尝吧！";
-                } else {
-                    int x = player.getLocation().getBlockX();
-                    int y = player.getLocation().getBlockY();
-                    int z = player.getLocation().getBlockZ();
-                    return "/fill " + x + " " + y + " " + z + " " + (x + 2) + " " + (y + 2) + " " + (z + 2) + " iron_block\n" +
-                            "/setblock " + (x + 1) + " " + (y + 3) + " " + (z + 1) + " beacon\n" +
-                            "/effect give " + name + " regeneration 60 1\nAI: 为你建了个小灯塔，享受加成吧！";
-                }
+    private boolean validateCommand(String command) {
+        if (command == null || !command.startsWith("/")) return false;
+        String[] lines = command.split("\n");
+        for (String line : lines) {
+            if (line.startsWith("/") && !COMMAND_WHITELIST.isEmpty() && !COMMAND_WHITELIST.contains(line.split(" ")[0].substring(1))) {
+                return false;
             }
-            return result;
-        } catch (Exception e) {
-            LogUtil.severe("创意生成失败: " + e.getMessage());
-            return "/give " + name + " minecraft:apple 1\nAI: 出错了，给你个苹果安慰一下！";
         }
+        return true;
     }
 
     private String buildPrompt(String name, String message, String playerContext, String inventory, String effects, String worldResources, boolean isAdmin) {
         String rawPrompt = config.getConfig().getString(isAdmin ? "ai_admin_prompt" : "ai_public_prompt", "默认提示未定义");
         String historySummary = getHistorySummary(name);
         if (isAdmin) {
-            rawPrompt = "你是一个Minecraft 1.21.4服务器AI助手，名字叫“" + aiName + "”。根据玩家输入和上下文，生成Minecraft命令（每行以 / 开头，多行以 \\n 分隔，最后附 'AI: <简短回复>'）。可以自由发挥，生成实用、有趣或高级的内容，如建筑、红石装置或随机事件。参考相关命令但不拘泥于模板。\n" +
+            rawPrompt = "你是一个Minecraft 1.21.4服务器AI助手，名字叫“" + aiName + "”。你的任务是：\n" +
+                    "1. 理解玩家输入的需求，分析具体意图（例如“建造房屋”、“给予物品”、“生成效果”）。\n" +
+                    "2. 根据意图生成有效的Minecraft命令（每行以 / 开头，多行以 \\n 分隔，最后附 'AI: <简短回复>'）。\n" +
+                    "3. 确保命令符合Minecraft语法，可直接执行，不返回纯文本或无效内容。\n" +
                     "玩家状态: " + (playerContext != null ? playerContext : "未知玩家状态") + "\n" +
                     "历史摘要: " + historySummary + "\n" +
                     "背包: " + (inventory != null ? inventory : "背包未知") + "\n" +
                     "效果: " + (effects != null ? effects : "无效果") + "\n" +
                     "世界资源: " + (worldResources != null ? worldResources : "世界资源未知") + "\n" +
-                    "当前输入: " + (message.isEmpty() ? "玩家未提供具体要求，请自由发挥生成命令" : message);
+                    "当前输入: " + (message.isEmpty() ? "玩家未提供具体要求，请根据玩家状态自由发挥生成命令" : message);
         } else {
             rawPrompt = rawPrompt
                     .replace("{ai_name}", aiName)
