@@ -1,21 +1,28 @@
 package com.darkpixel.ai;
+
 import com.darkpixel.manager.ConfigManager;
 import com.darkpixel.utils.FileUtil;
 import com.darkpixel.utils.LogUtil;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.scheduler.BukkitRunnable;
 import java.io.File;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
+
 public class AiChatHistory {
     private final ConfigManager config;
     private final Map<String, List<String>> playerChatHistory = new ConcurrentHashMap<>();
     final Set<String> stoppedPlayers = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
     private final int maxHistorySize;
+
     public AiChatHistory(ConfigManager config) {
         this.config = config;
         this.maxHistorySize = config.getConfig().getInt("chat_history_max_size", 10);
@@ -23,6 +30,7 @@ public class AiChatHistory {
             throw new IllegalStateException("LogUtil 未初始化，请在插件启动时调用 LogUtil.init()");
         }
     }
+
     public void loadChatHistoryAsync() {
         new BukkitRunnable() {
             @Override
@@ -48,6 +56,7 @@ public class AiChatHistory {
             }
         }.runTaskAsynchronously(config.getPlugin());
     }
+
     public void saveChatHistory() {
         File configFile = new File(config.getPlugin().getDataFolder(), "chat_history.yml");
         YamlConfiguration yaml = new YamlConfiguration();
@@ -61,6 +70,7 @@ public class AiChatHistory {
             lock.readLock().unlock();
         }
     }
+
     public void addMessage(String player, String message) {
         if (stoppedPlayers.contains(player)) return;
         lock.writeLock().lock();
@@ -75,6 +85,7 @@ public class AiChatHistory {
             lock.writeLock().unlock();
         }
     }
+
     public String getHistory(String player) {
         lock.readLock().lock();
         try {
@@ -83,10 +94,12 @@ public class AiChatHistory {
             lock.readLock().unlock();
         }
     }
+
     public String getMessageContext(String player, String message) {
         String historyContext = getHistory(player);
         return "[" + player + "] " + message + (historyContext.isEmpty() ? "" : "\n历史记录:\n" + historyContext);
     }
+
     public void clearHistory(String player) {
         lock.writeLock().lock();
         try {
@@ -97,6 +110,7 @@ public class AiChatHistory {
             lock.writeLock().unlock();
         }
     }
+
     public List<String> getPlayerHistory(String player) {
         lock.readLock().lock();
         try {
@@ -105,6 +119,7 @@ public class AiChatHistory {
             lock.readLock().unlock();
         }
     }
+
     public void toggleHistory(String player, boolean stop) {
         if (stop) stoppedPlayers.add(player);
         else stoppedPlayers.remove(player);

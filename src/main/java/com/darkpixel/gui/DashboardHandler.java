@@ -1,16 +1,16 @@
 package com.darkpixel.gui;
+
 import com.darkpixel.Global;
 import com.darkpixel.ai.AiChatHandler;
 import com.darkpixel.manager.ConfigManager;
 import com.darkpixel.utils.LogUtil;
-import org.bukkit.command.CommandSender;
-import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
@@ -27,11 +27,16 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
 import org.bukkit.metadata.FixedMetadataValue;
+import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitRunnable;
+
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+
 public class DashboardHandler implements Listener, CommandExecutor, TabCompleter {
-    private final Map<Player, Player> spectating = new HashMap<>();
-    private final Map<Player, Integer> chatCounts = new HashMap<>();
-    private final Map<Player, Long> lastClaimTime = new HashMap<>();
+    private final Map<Player, Player> spectating = new ConcurrentHashMap<>();
+    private final Map<Player, Integer> chatCounts = new ConcurrentHashMap<>();
+    private final Map<Player, Long> lastClaimTime = new ConcurrentHashMap<>();
     private int dashboardChatLimit = 5;
     private final JavaPlugin plugin;
     private final AiChatHandler aiChat;
@@ -39,58 +44,76 @@ public class DashboardHandler implements Listener, CommandExecutor, TabCompleter
     private final Global context;
     private static final int[] GAME_SLOTS = {10, 11, 12, 13, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 28, 29, 30, 31, 32, 33, 34, 35};
     private static final int CHAT_LIMIT_SLOT = 48;
+
     public DashboardHandler(JavaPlugin plugin, AiChatHandler aiChat, ConfigManager configManager, Global context) {
         this.plugin = plugin;
         this.aiChat = aiChat;
         this.configManager = configManager;
         this.context = context;
         plugin.getServer().getPluginManager().registerEvents(this, plugin);
-        loadChatCounts();
+        loadChatCountsAsync(); // 异步加载
     }
+
     public void reloadConfig() {
-        loadChatCounts();
+        loadChatCountsAsync();
         LogUtil.info("Dashboard 配置已重新加载");
     }
+
     @Override
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
         if (!(sender instanceof Player player)) {
+            sender.sendMessage("§c仅玩家可用");
             return true;
         }
-        if (cmd == null) {
-            return false;
-        }
-        String commandName = cmd.getName();
-        if (commandName == null) {
-            return false;
-        }
-        if (commandName.equalsIgnoreCase("dashboard")) {
+        if (cmd == null || cmd.getName() == null) return false;
+
+        String commandName = cmd.getName().toLowerCase();
+        if (commandName.equals("dashboard")) {
             openMainDashboard(player);
-        } else if (commandName.equalsIgnoreCase("hub")) {
+        } else if (commandName.equals("hub")) {
             resetPlayerState(player);
             player.performCommand("trigger hub");
             player.sendMessage("§a已返回大厅");
         }
         return true;
     }
+
     @Override
     public List<String> onTabComplete(CommandSender sender, Command cmd, String alias, String[] args) {
         return Collections.emptyList();
     }
+
     public void openMainDashboard(Player player) {
+        if (!configManager.getConfig().getBoolean("dashboard_enabled", true)) {
+            player.sendMessage("§c仪表盘功能已禁用！");
+            return;
+        }
+
         YamlConfiguration minigameConfig = context.getMinigameConfig();
         if (minigameConfig == null || !minigameConfig.contains("games")) {
             player.sendMessage("§c小游戏配置加载失败，请联系管理员！检查 minigame.yml 文件。");
             LogUtil.severe("小游戏配置加载失败：minigame.yml 可能缺失或格式错误。");
             return;
         }
+
         resetPlayerState(player);
         Inventory inventory = Bukkit.createInventory(player, 54, "§l服务大厅");
-        populateGameItems(inventory, minigameConfig);
-        addDashboardChatLimitItem(inventory, player);
-        addPlayerListItem(inventory);
-        addServerStatusItem(inventory, player);
-        player.openInventory(inventory);
+
+        // 异步填充库存，避免主线程卡顿
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                populateGameItems(inventory, minigameConfig);
+                addDashboardChatLimitItem(inventory, player);
+                addPlayerListItem(inventory);
+                addServerStatusItem(inventory, player);
+
+                // 在主线程中打开库存
+                Bukkit.getScheduler().runTask(plugin, () -> player.openInventory(inventory));
+            }
+        }.runTaskAsynchronously(plugin);
     }
+
     private void populateGameItems(Inventory inventory, YamlConfiguration minigameConfig) {
         int slotIndex = 0;
         for (String game : minigameConfig.getConfigurationSection("games").getKeys(false)) {
@@ -113,6 +136,7 @@ public class DashboardHandler implements Listener, CommandExecutor, TabCompleter
             inventory.setItem(GAME_SLOTS[slotIndex++], item);
         }
     }
+
     private void addDashboardChatLimitItem(Inventory inventory, Player viewer) {
         ItemStack chatLimit = new ItemStack(Material.PAPER);
         ItemMeta meta = chatLimit.getItemMeta();
@@ -123,6 +147,7 @@ public class DashboardHandler implements Listener, CommandExecutor, TabCompleter
         }
         inventory.setItem(CHAT_LIMIT_SLOT, chatLimit);
     }
+
     private void addPlayerListItem(Inventory inventory) {
         ItemStack players = new ItemStack(Material.PLAYER_HEAD);
         SkullMeta meta = (SkullMeta) players.getItemMeta();
@@ -133,6 +158,7 @@ public class DashboardHandler implements Listener, CommandExecutor, TabCompleter
         }
         inventory.setItem(49, players);
     }
+
     private void addServerStatusItem(Inventory inventory, Player player) {
         ItemStack serverInfo = new ItemStack(Material.CLOCK);
         ItemMeta meta = serverInfo.getItemMeta();
@@ -150,6 +176,7 @@ public class DashboardHandler implements Listener, CommandExecutor, TabCompleter
         }
         inventory.setItem(50, serverInfo);
     }
+
     private void openPlayerList(Player player, int page) {
         List<Player> onlinePlayers = new ArrayList<>(Bukkit.getOnlinePlayers());
         onlinePlayers.remove(player);
@@ -161,6 +188,7 @@ public class DashboardHandler implements Listener, CommandExecutor, TabCompleter
         inventory.setItem(49, createNavigationItem(Material.BARRIER, "§c返回主菜单"));
         player.openInventory(inventory);
     }
+
     private int populatePlayerItems(Inventory inventory, List<Player> players, int page) {
         int slot = 0;
         for (int i = page * 45; i < Math.min((page + 1) * 45, players.size()); i++) {
@@ -169,6 +197,7 @@ public class DashboardHandler implements Listener, CommandExecutor, TabCompleter
         }
         return slot;
     }
+
     private ItemStack createPlayerHead(Player target) {
         ItemStack head = new ItemStack(Material.PLAYER_HEAD);
         SkullMeta meta = (SkullMeta) head.getItemMeta();
@@ -186,6 +215,7 @@ public class DashboardHandler implements Listener, CommandExecutor, TabCompleter
         }
         return head;
     }
+
     private ItemStack createNavigationItem(Material material, String name) {
         ItemStack item = new ItemStack(material);
         ItemMeta meta = item.getItemMeta();
@@ -195,6 +225,7 @@ public class DashboardHandler implements Listener, CommandExecutor, TabCompleter
         }
         return item;
     }
+
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
         if (!(event.getWhoClicked() instanceof Player player)) return;
@@ -203,6 +234,7 @@ public class DashboardHandler implements Listener, CommandExecutor, TabCompleter
         ItemStack item = event.getCurrentItem();
         if (item == null || !item.hasItemMeta()) return;
         event.setCancelled(true);
+
         String strippedTitle = ChatColor.stripColor(title).trim();
         if (strippedTitle.equals("服务大厅")) {
             if (item.getType() == Material.PAPER && item.getItemMeta().getDisplayName().startsWith("§e获取发言次数")) {
@@ -225,6 +257,7 @@ public class DashboardHandler implements Listener, CommandExecutor, TabCompleter
             handlePlayerListClick(player, item);
         }
     }
+
     private void handleChatLimitClick(Player player) {
         synchronized (this) {
             if (dashboardChatLimit <= 0) {
@@ -242,10 +275,11 @@ public class DashboardHandler implements Listener, CommandExecutor, TabCompleter
             int playerChatCount = chatCounts.getOrDefault(player, 0) + 1;
             chatCounts.put(player, playerChatCount);
             player.sendMessage("§a已获取 1 次AI聊天次数，剩余: " + dashboardChatLimit + "，你当前次数: " + playerChatCount);
-            saveChatCounts();
+            saveChatCountsAsync();
             updateDashboard(player);
         }
     }
+
     private void handleGameClick(Player player, String game, YamlConfiguration minigameConfig) {
         resetPlayerState(player);
         if (game.equals("hub")) {
@@ -265,6 +299,7 @@ public class DashboardHandler implements Listener, CommandExecutor, TabCompleter
             }
         }
     }
+
     private void handlePlayerListClick(Player player, ItemStack item) {
         if (item.getType() == Material.PLAYER_HEAD) {
             Player target = Bukkit.getPlayer(ChatColor.stripColor(item.getItemMeta().getDisplayName()));
@@ -280,6 +315,7 @@ public class DashboardHandler implements Listener, CommandExecutor, TabCompleter
             openMainDashboard(player);
         }
     }
+
     @EventHandler
     public void onPlayerMove(PlayerMoveEvent event) {
         Player player = event.getPlayer();
@@ -295,6 +331,7 @@ public class DashboardHandler implements Listener, CommandExecutor, TabCompleter
             player.sendMessage("§a你已超出观战目标10格范围，已传送回目标位置");
         }
     }
+
     @EventHandler
     public void onPlayerInteract(PlayerInteractEvent event) {
         Player player = event.getPlayer();
@@ -303,6 +340,7 @@ public class DashboardHandler implements Listener, CommandExecutor, TabCompleter
             event.setCancelled(true);
         }
     }
+
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
@@ -310,16 +348,18 @@ public class DashboardHandler implements Listener, CommandExecutor, TabCompleter
         chatCounts.putIfAbsent(player, 0);
         Bukkit.broadcastMessage("§7Lobby §8| §7" + player.getName() + " joined the game");
     }
+
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
         if (spectating.containsKey(player)) exitSpectate(player);
         spectating.entrySet().removeIf(entry -> entry.getValue().equals(player));
-        saveChatCounts();
+        saveChatCountsAsync();
         chatCounts.remove(player);
         lastClaimTime.remove(player);
         Bukkit.broadcastMessage("§7Lobby §8| §7" + player.getName() + " left the game");
     }
+
     private void spectatePlayer(Player player, Player target) {
         resetPlayerState(player);
         player.setGameMode(org.bukkit.GameMode.SPECTATOR);
@@ -328,6 +368,7 @@ public class DashboardHandler implements Listener, CommandExecutor, TabCompleter
         player.setMetadata("isSpectating", new FixedMetadataValue(plugin, true));
         player.sendMessage("§a正在观战 " + target.getName() + "，右键退出观战模式");
     }
+
     private void exitSpectate(Player player) {
         if (player.isOnline()) {
             player.setGameMode(org.bukkit.GameMode.SURVIVAL);
@@ -338,55 +379,75 @@ public class DashboardHandler implements Listener, CommandExecutor, TabCompleter
         }
         spectating.remove(player);
     }
+
     private void resetPlayerState(Player player) {
         if (spectating.containsKey(player)) exitSpectate(player);
         if (player.getGameMode() == org.bukkit.GameMode.SPECTATOR) {
             player.setGameMode(org.bukkit.GameMode.SURVIVAL);
         }
         player.removeMetadata("isSpectating", plugin);
-        if (player.getOpenInventory().getTitle().equals("§l服务大厅") ||
-                player.getOpenInventory().getTitle().startsWith("§l在线玩家 - 页 ")) {
+        if (player.getOpenInventory() != null &&
+                (player.getOpenInventory().getTitle().equals("§l服务大厅") ||
+                        player.getOpenInventory().getTitle().startsWith("§l在线玩家 - 页 "))) {
             player.closeInventory();
         }
         Bukkit.getScheduler().runTaskLater(plugin, player::updateInventory, 1L);
     }
-    private void loadChatCounts() {
-        YamlConfiguration config = configManager.getConfig("config.yml"); 
-        dashboardChatLimit = config.getInt("dashboard_chat_limit", 5);
-        if (dashboardChatLimit < 0) {
-            dashboardChatLimit = 5;
-            config.set("dashboard_chat_limit", 5);
-            configManager.saveConfig("config.yml"); 
-        }
-        for (String playerName : config.getConfigurationSection("chat_counts") != null ?
-                config.getConfigurationSection("chat_counts").getKeys(false) : new ArrayList<String>()) {
-            Player player = Bukkit.getPlayer(playerName);
-            if (player != null) {
-                chatCounts.put(player, config.getInt("chat_counts." + playerName, 0));
+
+    private void loadChatCountsAsync() {
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                YamlConfiguration config = configManager.getConfig("config.yml");
+                dashboardChatLimit = config.getInt("dashboard_chat_limit", 5);
+                if (dashboardChatLimit < 0) {
+                    dashboardChatLimit = 5;
+                    config.set("dashboard_chat_limit", 5);
+                    configManager.saveConfig("config.yml");
+                }
+                if (config.getConfigurationSection("chat_counts") != null) {
+                    for (String playerName : config.getConfigurationSection("chat_counts").getKeys(false)) {
+                        Player player = Bukkit.getPlayer(playerName);
+                        if (player != null) {
+                            chatCounts.put(player, config.getInt("chat_counts." + playerName, 0));
+                        }
+                    }
+                }
+                LogUtil.info("异步加载聊天次数完成");
             }
-        }
+        }.runTaskAsynchronously(plugin);
     }
-    private void saveChatCounts() {
-        YamlConfiguration config = configManager.getConfig("config.yml"); 
-        config.set("dashboard_chat_limit", dashboardChatLimit);
-        chatCounts.forEach((player, count) -> config.set("chat_counts." + player.getName(), count));
-        configManager.saveConfig("config.yml"); 
+
+    private void saveChatCountsAsync() {
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                YamlConfiguration config = configManager.getConfig("config.yml");
+                config.set("dashboard_chat_limit", dashboardChatLimit);
+                chatCounts.forEach((player, count) -> config.set("chat_counts." + player.getName(), count));
+                configManager.saveConfig("config.yml");
+            }
+        }.runTaskAsynchronously(plugin);
     }
+
     public void addDashboardChatLimit(int count) {
         synchronized (this) {
             dashboardChatLimit += Math.max(0, count);
-            saveChatCounts();
+            saveChatCountsAsync();
             updateDashboard(Bukkit.getOnlinePlayers().stream()
                     .filter(p -> p.getOpenInventory().getTitle().equals("§l服务大厅"))
                     .findFirst().orElse(null));
         }
     }
+
     public int getDashboardChatLimit() {
         return dashboardChatLimit;
     }
+
     public Map<Player, Integer> getChatCounts() {
         return chatCounts;
     }
+
     private void updateDashboard(Player player) {
         if (player != null && player.getOpenInventory().getTitle().equals("§l服务大厅")) {
             openMainDashboard(player);

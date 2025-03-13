@@ -61,11 +61,11 @@ public class AiChatCommands implements CommandExecutor, TabCompleter {
     public List<String> onTabComplete(CommandSender sender, Command cmd, String alias, String[] args) {
         List<String> suggestions = new ArrayList<>();
         if (!(sender instanceof Player)) return suggestions;
-        boolean isOp = sender.hasPermission("darkpixel.admin");
+        boolean isAdmin = sender.hasPermission("darkpixel.admin");
         if (args.length == 1) {
             suggestions.addAll(Arrays.asList("public", "private"));
-            if (isOp) suggestions.addAll(Arrays.asList("mode", "setmodel", "whitelist", "unwhitelist", "setlimit", "addlimit", "history", "adm"));
-        } else if (args.length == 2 && isOp) {
+            if (isAdmin) suggestions.addAll(Arrays.asList("mode", "setmodel", "whitelist", "unwhitelist", "setlimit", "addlimit", "history", "adm"));
+        } else if (args.length == 2 && isAdmin) {
             String subCommand = args[0].toLowerCase();
             if (subCommand.equals("mode") || subCommand.equals("setmodel")) {
                 suggestions.addAll(Arrays.asList("deepseek-chat", "deepseek-reasoner", "deepseek-coder", "deepseek-pro"));

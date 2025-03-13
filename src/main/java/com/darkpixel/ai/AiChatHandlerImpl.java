@@ -8,7 +8,10 @@ import org.bukkit.Bukkit;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
@@ -218,32 +221,66 @@ public class AiChatHandlerImpl implements AiChatHandler {
                 ", 是否飞行: " + (player.isFlying() ? "是" : "否");
     }
 
+    private String buildPrompt(String name, String message, String playerContext, String inventory, String effects, String worldResources, boolean isAdmin) {
+        String historySummary = getHistorySummary(name);
+        String aiName = config.getAiName();
+
+        if (isAdmin) {
+            return config.getAdminPrompt()
+                    .replace("{ai_name}", aiName)
+                    .replace("{player_context}", playerContext)
+                    .replace("{history}", historySummary)
+                    .replace("{inventory}", inventory)
+                    .replace("{effects}", effects)
+                    .replace("{world_resources}", worldResources)
+                    .replace("{message}", message);
+        } else {
+            return config.getSystemPrompt()
+                    .replace("{ai_name}", aiName)
+                    .replace("{player_context}", playerContext)
+                    .replace("{history}", historySummary)
+                    .replace("{inventory}", inventory)
+                    .replace("{effects}", effects)
+                    .replace("{world_resources}", worldResources)
+                    .replace("{message}", message);
+        }
+    }
+
+
     private void executeAdminRequest(Player player, String prompt, String originalMessage) {
         String name = player.getName();
         Global.executor.submit(() -> {
             try {
                 api.chatCompletionAsync(prompt, "deepseek-reasoner", 2000).thenAccept(resp -> {
-                    String finalResp = validateCommand(resp) ? resp : "/say " + aiName + " 无法生成有效命令\nAI: 请说得更清楚点！";
+                    String finalResp;
+                    if (resp == null || resp.trim().isEmpty()) {
+                        finalResp = "/say " + aiName + " 返回为空";
+                    } else if (!validateCommand(resp)) {
+                        finalResp = "/say " + aiName + " 生成的命令无效";
+                    } else {
+                        finalResp = resp;
+                    }
+                    String finalResp1 = finalResp;
                     Bukkit.getScheduler().runTask(config.getPlugin(), () -> {
-                        chatHistory.addMessage(name, aiName + ": " + finalResp);
-                        Bukkit.broadcastMessage("§c[AI管理员广播] " + name + ": " + originalMessage);
-                        executeCommands(finalResp, name, player);
+                        chatHistory.addMessage(name, "管理员命令: " + finalResp1);
+                        Bukkit.broadcastMessage("§c[AI管理员] " + name + ": " + originalMessage);
+                        executeCommands(finalResp1, name, player);
                     });
                 }).exceptionally(throwable -> {
-                    String fallbackResp = "/say " + aiName + " 请求失败\nAI: 出错了，稍后再试！";
+                    String fallbackResp = "/say " + aiName + " 请求失败";
                     Bukkit.getScheduler().runTask(config.getPlugin(), () -> {
-                        chatHistory.addMessage(name, aiName + ": " + fallbackResp);
-                        Bukkit.broadcastMessage("§c[AI管理员广播] " + name + ": " + originalMessage);
+                        chatHistory.addMessage(name, "管理员命令: " + fallbackResp);
+                        Bukkit.broadcastMessage("§c[AI管理员] " + name + ": " + originalMessage);
                         executeCommands(fallbackResp, name, player);
                     });
                     LogUtil.severe("AI 管理员请求异常: " + throwable.getMessage());
                     return null;
                 });
             } catch (Exception e) {
-                String fallbackResp = "/say " + aiName + " 处理失败\nAI: 请联系管理员！";
+                String fallbackResp = "/say " + aiName + " 处理失败";
                 Bukkit.getScheduler().runTask(config.getPlugin(), () -> {
-                    chatHistory.addMessage(name, aiName + ": " + fallbackResp);
-                    Bukkit.broadcastMessage("§c[AI管理员广播] " + name + ": " + originalMessage);
+                    chatHistory.addMessage(name, "管理员命令: " + fallbackResp);
+                    Bukkit.broadcastMessage("§c[AI管理员] " + name + ": " + originalMessage);
                     executeCommands(fallbackResp, name, player);
                 });
                 LogUtil.severe("AI 管理员请求处理失败: " + e.getMessage());
@@ -255,38 +292,16 @@ public class AiChatHandlerImpl implements AiChatHandler {
         if (command == null || !command.startsWith("/")) return false;
         String[] lines = command.split("\n");
         for (String line : lines) {
-            if (line.startsWith("/") && !COMMAND_WHITELIST.isEmpty() && !COMMAND_WHITELIST.contains(line.split(" ")[0].substring(1))) {
+            if (!line.startsWith("/")) continue;
+            String cmdName = line.split(" ")[0].substring(1);
+            if (cmdName.equalsIgnoreCase("stop") || cmdName.equalsIgnoreCase("reload") || cmdName.equalsIgnoreCase("op")) {
+                return false;
+            }
+            if (!COMMAND_WHITELIST.isEmpty() && !COMMAND_WHITELIST.contains(cmdName)) {
                 return false;
             }
         }
         return true;
-    }
-
-    private String buildPrompt(String name, String message, String playerContext, String inventory, String effects, String worldResources, boolean isAdmin) {
-        String rawPrompt = config.getConfig().getString(isAdmin ? "ai_admin_prompt" : "ai_public_prompt", "默认提示未定义");
-        String historySummary = getHistorySummary(name);
-        if (isAdmin) {
-            rawPrompt = "你是一个Minecraft 1.21.4服务器AI助手，名字叫“" + aiName + "”。你的任务是：\n" +
-                    "1. 理解玩家输入的需求，分析具体意图（例如“建造房屋”、“给予物品”、“生成效果”）。\n" +
-                    "2. 根据意图生成有效的Minecraft命令（每行以 / 开头，多行以 \\n 分隔，最后附 'AI: <简短回复>'）。\n" +
-                    "3. 确保命令符合Minecraft语法，可直接执行，不返回纯文本或无效内容。\n" +
-                    "玩家状态: " + (playerContext != null ? playerContext : "未知玩家状态") + "\n" +
-                    "历史摘要: " + historySummary + "\n" +
-                    "背包: " + (inventory != null ? inventory : "背包未知") + "\n" +
-                    "效果: " + (effects != null ? effects : "无效果") + "\n" +
-                    "世界资源: " + (worldResources != null ? worldResources : "世界资源未知") + "\n" +
-                    "当前输入: " + (message.isEmpty() ? "玩家未提供具体要求，请根据玩家状态自由发挥生成命令" : message);
-        } else {
-            rawPrompt = rawPrompt
-                    .replace("{ai_name}", aiName)
-                    .replace("{player_context}", playerContext != null ? playerContext : "未知玩家状态")
-                    .replace("{history}", historySummary)
-                    .replace("{inventory}", inventory != null ? inventory : "背包未知")
-                    .replace("{effects}", effects != null ? effects : "无效果")
-                    .replace("{world_resources}", worldResources != null ? worldResources : "世界资源未知")
-                    .replace("{message}", message.isEmpty() ? "玩家未提供具体要求，请提供有趣建议" : message);
-        }
-        return rawPrompt;
     }
 
     private void executeChatRequest(Player player, String prompt, String originalMessage, boolean isPublic, Consumer<String> callback) {
@@ -323,22 +338,20 @@ public class AiChatHandlerImpl implements AiChatHandler {
         String[] commands = response.split("\n");
         for (int i = 0; i < commands.length; i++) {
             String command = commands[i].trim();
-            if (!command.startsWith("/")) command = "/say " + command;
-            String[] parts = command.split(" AI: ");
-            String cmd = parts[0];
-            String reply = parts.length > 1 ? parts[1] : "操作完成";
+            if (!command.startsWith("/")) continue;
             new BukkitRunnable() {
                 @Override
                 public void run() {
                     try {
-                        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), cmd.substring(1));
-                        Bukkit.broadcastMessage("§c[AI执行] " + playerName + ": " + cmd + " AI: " + reply);
+                        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command.substring(1));
+                        Bukkit.broadcastMessage("§c[AI执行] " + playerName + ": " + command);
+                        LogUtil.info("成功执行命令: " + command + " for " + playerName);
                     } catch (Exception e) {
                         Bukkit.broadcastMessage("§c[" + aiName + "错误] 命令执行失败: " + e.getMessage());
-                        LogUtil.severe("命令执行失败: " + cmd + " - " + e.getMessage());
+                        LogUtil.severe("命令执行失败: " + command + " - " + e.getMessage());
                     }
                 }
-            }.runTaskLater(config.getPlugin(), i * 5L);
+            }.runTaskLater(config.getPlugin(), i * 10L);
         }
     }
 
@@ -348,8 +361,10 @@ public class AiChatHandlerImpl implements AiChatHandler {
             @Override
             public void run() {
                 chatConfig.resetMessageCount();
-                LogUtil.info("玩家消息计数已重置~");
+                playerModels.keySet().removeIf(name -> Bukkit.getPlayer(name) == null);
+                lastRequestTime.keySet().removeIf(name -> Bukkit.getPlayer(name) == null);
             }
-        }.runTaskTimer(config.getPlugin(), 0L, resetInterval);
+        }.runTaskTimerAsynchronously(config.getPlugin(), 0L, resetInterval);
     }
+
 }

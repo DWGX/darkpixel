@@ -5,7 +5,11 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 import java.io.File;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 public class ConfigManager {
     private final JavaPlugin plugin;
@@ -21,39 +25,6 @@ public class ConfigManager {
             configFiles.put(configName, file);
             configs.put(configName, FileUtil.loadOrCreate(file, plugin, configName));
         }
-        initDefaultConfig();
-    }
-
-    private void initDefaultConfig() {
-        YamlConfiguration config = configs.get("config.yml");
-        config.addDefault("api_key", "sk-c4a51bdeab1f4a53805ecac6c8bf53f6");
-        config.addDefault("ai_name", "dwgx");
-        config.addDefault("available_models", Arrays.asList("deepseek-chat", "deepseek-reasoner", "deepseek-coder", "deepseek-pro"));
-        config.addDefault("ai_whitelist", new ArrayList<String>());
-        config.addDefault("player_message_limits", new HashMap<String, Integer>());
-        config.addDefault("ai_public_prompt", "你是一个Minecraft 1.21.4服务器AI助手，名字叫“{ai_name}”。根据玩家输入，提供自然友好的文本回复，不生成命令（以/开头）。若无法理解，回复“{ai_name}不太明白，能再解释一下吗？”。可以根据玩家状态和历史对话自由发挥，提供建议或创意。\n玩家状态: {player_context}\n历史摘要: {history}\n当前输入: {message}");
-        config.addDefault("ai_admin_prompt", "你是一个Minecraft 1.21.4服务器AI助手，名字叫“{ai_name}”。根据玩家输入和上下文，生成Minecraft命令（每行以 / 开头，多行以 \\n 分隔，附 \"AI: <简短回复>\"）。可以自由发挥，生成实用或创意的建筑、物品或效果。若无法理解，返回 \"/say {ai_name}无法理解，请明确需求 AI: 需要更多细节\"。参考相关命令，但不拘泥于模板。\n玩家状态: {player_context}\n历史摘要: {history}\n相关命令: {commands}\n背包: {inventory}\n效果: {effects}\n世界资源: {world_resources}\n当前输入: {message}");
-        config.addDefault("ai_welcome_enabled", true);
-        config.addDefault("ai_welcome_interval", 3600000L);
-        config.addDefault("message_reset_interval", 72000L);
-        config.addDefault("chat_history_max_size", 10);
-        config.addDefault("blocking.enabled", true);
-        config.addDefault("blocking.damage-reduce-percentage", 50);
-        config.addDefault("blocking.reduce-only-entity-damage", true);
-        config.addDefault("blocking.enable-vanilla-blocking", true);
-        config.addDefault("npc_enabled", true);
-        config.addDefault("dashboard_enabled", true);
-        config.addDefault("dashboard_chat_limit", 5);
-        config.addDefault("freeze.enabled", true);
-        config.addDefault("freeze.persist_across_relog", false);
-        config.addDefault("sitting.enabled", true);
-        config.addDefault("sitting.allowSittingOnBlocks", true);
-        config.addDefault("sitting.allowSittingOnPlayers", true);
-        config.addDefault("sitting.blocked-worlds", new ArrayList<String>());
-        config.addDefault("sitting.valid-blocks", Arrays.asList("stair", "slab", "step"));
-        config.addDefault("sitting.player-permissions", new HashMap<String, Boolean>());
-        config.options().copyDefaults(true);
-        saveConfig("config.yml");
     }
 
     public synchronized void reloadAllConfigs() {
@@ -79,6 +50,7 @@ public class ConfigManager {
     public YamlConfiguration getPlayerConfig() { return getConfig("player.yml"); }
     public YamlConfiguration getWorldDataConfig() { return getConfig("world_data.yml"); }
     public String getApiKey() { return getConfig().getString("api_key", ""); }
+    public String getApiProvider() { return getConfig().getString("api_provider", "deepseek"); }
     public String getAiName() { return getConfig().getString("ai_name", "AI"); }
     public List<String> getAvailableModels() { return getConfig().getStringList("available_models"); }
     public String getSystemPrompt() { return getConfig().getString("ai_public_prompt", "").replace("{ai_name}", getAiName()); }
@@ -145,7 +117,6 @@ public class ConfigManager {
     public synchronized void saveConfig(String configName) {
         YamlConfiguration config = configs.get(configName);
         File file = configFiles.get(configName);
-        FileUtil.saveAsync(config, file, plugin).thenRun(() ->
-                plugin.getLogger().info(configName + " 保存完成"));
+        FileUtil.saveAsync(config, file, plugin);
     }
 }
