@@ -21,12 +21,9 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 public class BringBackBlocking implements Listener {
     private final List<Player> blocking = new ArrayList<>();
-    private final boolean oldCombat;
     private final Global context;
     public BringBackBlocking(Global context) {
         this.context = context;
-        this.oldCombat = Bukkit.getPluginManager().isPluginEnabled("OldCombatMechanics");
-        if (!oldCombat) Bukkit.getLogger().info("[Blocking] 无OldCombatMechanics，使用独立机制");
         Bukkit.getLogger().info("[Blocking] 系统启用");
         ProtocolLibrary.getProtocolManager().addPacketListener(
                 new PacketAdapter(context.getPlugin(), ListenerPriority.NORMAL, PacketType.Play.Client.BLOCK_DIG) {

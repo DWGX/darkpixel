@@ -58,9 +58,10 @@ public class ServerSwitchChest implements Listener, CommandExecutor {
 
     private void openSwitchChest(Player player) {
         Inventory inv = Bukkit.createInventory(player, 27, "§l切服箱");
-        inv.setItem(11, createNetherStar()); // 主城移到11号槽
-        inv.setItem(13, createRedBed());    // 起床战争移到13号槽
-        inv.setItem(15, createTunnelRats()); // Tunnel Rats 添加到15号槽
+        inv.setItem(10, createNetherStar());   // 主城移到10号槽
+        inv.setItem(12, createRedBed());      // 起床战争移到12号槽
+        inv.setItem(14, createTunnelRats());  // Tunnel Rats移到14号槽
+        inv.setItem(16, createSurviveItem()); // 生存服务器添加到16号槽
         player.openInventory(inv);
     }
 
@@ -87,6 +88,9 @@ public class ServerSwitchChest implements Listener, CommandExecutor {
         } else if (itemName.equals("§dTunnel Rats")) {
             switchServer(player, "tunnelrats");
             player.sendMessage("§a正在切换至Tunnel Rats服务器...");
+        } else if (itemName.equals("§b生存服务器")) {
+            switchServer(player, "survive");
+            player.sendMessage("§a正在切换至生存服务器...");
         }
         player.closeInventory();
     }
@@ -117,11 +121,20 @@ public class ServerSwitchChest implements Listener, CommandExecutor {
     }
 
     private ItemStack createTunnelRats() {
-        ItemStack tunnelRatsItem = new ItemStack(Material.RABBIT_FOOT); //使用兔子脚作为图标
+        ItemStack tunnelRatsItem = new ItemStack(Material.RABBIT_FOOT);
         ItemMeta meta = tunnelRatsItem.getItemMeta();
         meta.setDisplayName("§dTunnel Rats");
         meta.setLore(Arrays.asList("§7点击切换至Tunnel Rats服务器"));
         tunnelRatsItem.setItemMeta(meta);
         return tunnelRatsItem;
+    }
+
+    private ItemStack createSurviveItem() {
+        ItemStack surviveItem = new ItemStack(Material.DIAMOND_PICKAXE); // 使用钻石镐作为生存服务器图标
+        ItemMeta meta = surviveItem.getItemMeta();
+        meta.setDisplayName("§b生存服务器");
+        meta.setLore(Arrays.asList("§7点击切换至生存服务器"));
+        surviveItem.setItemMeta(meta);
+        return surviveItem;
     }
 }
