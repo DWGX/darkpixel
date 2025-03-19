@@ -39,8 +39,10 @@ public final class Main extends JavaPlugin {
                 sender.sendMessage("§c你没有权限执行此命令！");
                 return true;
             }
-            context.getConfigManager().reloadAllConfigs();
-            sender.sendMessage("§a所有配置文件已重新加载！");
+            Global.executor.submit(() -> {
+                context.getConfigManager().reloadAllConfigsAsync();
+                sender.sendMessage("§a所有配置文件已重新加载！");
+            });
             return true;
         }
         return false;

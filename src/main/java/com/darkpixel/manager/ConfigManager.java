@@ -27,7 +27,7 @@ public class ConfigManager {
         }
     }
 
-    public synchronized void reloadAllConfigs() {
+    public synchronized void reloadAllConfigsAsync() {
         for (String configName : configFiles.keySet()) {
             configs.put(configName, YamlConfiguration.loadConfiguration(configFiles.get(configName)));
             plugin.getLogger().info("已重新加载配置文件: " + configName);

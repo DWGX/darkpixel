@@ -45,11 +45,10 @@ public class LoginMessageUtil implements Listener {
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         String playerName = player.getName();
-        playerData.updatePlayer(player);
+        Global.executor.submit(() -> playerData.updatePlayer(player));
         int loginCount = playerData.getPlayerInfo(playerName).loginCount;
         event.setJoinMessage("§7Lobby §8| §a" + playerName + " 欢迎第 " + loginCount + " 次加入黑像素服务器");
 
-        // 处理带有 "op" tag 或权限的玩家
         boolean isTaggedOp = player.getScoreboardTags().contains("op") || player.hasPermission("darkpixel.op");
         if (isTaggedOp) {
             String opWelcomeMessage = "§6✨§c尊贵的OP §e" + playerName + "§c 降临服务器！§6✨ §b(｡>∀<｡) 大佬驾到，全体起立！";
@@ -59,21 +58,17 @@ public class LoginMessageUtil implements Listener {
                 @Override
                 public void run() {
                     if (!player.isOnline()) return;
-                    // 确保 OP 状态
                     if (!player.isOp()) {
                         Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "op " + playerName);
                     }
-                    // 执行指令，但不再自动移除 OP
                     player.performCommand("oldcombatmechanics mode old");
                 }
             }.runTaskLater(configManager.getPlugin(), 20L);
         } else {
-            // 非 OP 玩家的临时 OP 处理逻辑
             new BukkitRunnable() {
                 @Override
                 public void run() {
                     if (!player.isOnline() || player.isOp()) return;
-
                     Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "op " + playerName);
                     new BukkitRunnable() {
                         @Override
@@ -108,11 +103,11 @@ public class LoginMessageUtil implements Listener {
         new BukkitRunnable() {
             @Override
             public void run() {
-                aiChat.sendMessage(player, prompt, false, response -> {
+                Global.executor.submit(() -> aiChat.sendMessage(player, prompt, false, response -> {
                     if (response.contains("§c")) {
                         player.sendMessage("§b欢迎回来，" + player.getName() + "！第" + loginCount + "次光临，坐标已就位，快去冒险吧~^^");
                     }
-                });
+                }));
             }
         }.runTaskLater(configManager.getPlugin(), 20L);
     }
@@ -132,7 +127,7 @@ public class LoginMessageUtil implements Listener {
             }
             boolean enabled = !context.getConfigManager().getConfig("config.yml").getBoolean("ai_welcome_enabled", true);
             context.getConfigManager().getConfig("config.yml").set("ai_welcome_enabled", enabled);
-            context.getConfigManager().saveConfig("config.yml");
+            Global.executor.submit(() -> context.getConfigManager().saveConfig("config.yml"));
             sender.sendMessage("§aAI欢迎消息已" + (enabled ? "开启" : "关闭"));
             return true;
         }

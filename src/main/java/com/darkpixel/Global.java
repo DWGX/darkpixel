@@ -49,10 +49,10 @@ public class Global {
     private final RadioChestZombie radioChestZombie;
     private final LobbyZombie lobbyZombie;
     public static final ExecutorService executor = new ThreadPoolExecutor(
-            Math.max(2, Runtime.getRuntime().availableProcessors() / 2),
+            Runtime.getRuntime().availableProcessors(),
             Runtime.getRuntime().availableProcessors() * 2,
             60L, TimeUnit.SECONDS,
-            new LinkedBlockingQueue<>(100),
+            new LinkedBlockingQueue<>(),
             new ThreadPoolExecutor.CallerRunsPolicy()
     );
 
@@ -79,7 +79,7 @@ public class Global {
         this.antiCheatHandler = new AntiCheatHandler(this);
         new CommandManager(this);
         registerEvents();
-        configManager.reloadAllConfigs();
+        Global.executor.submit(() -> configManager.reloadAllConfigsAsync());
     }
 
     private AiChatHandler initAiChat() {
@@ -114,7 +114,9 @@ public class Global {
     }
 
     private void registerEvents() {
-        if (bringBackBlocking != null) plugin.getServer().getPluginManager().registerEvents(bringBackBlocking, plugin);
+        if (bringBackBlocking != null && configManager.getConfig().getBoolean("enable_bring_back_blocking", true)) {
+            plugin.getServer().getPluginManager().registerEvents(bringBackBlocking, plugin);
+        }
         plugin.getServer().getPluginManager().registerEvents(new AiChatEvents(aiChat), plugin);
         plugin.getServer().getPluginManager().registerEvents(npcHandler, plugin);
         plugin.getServer().getPluginManager().registerEvents(switchChestZombie, plugin);

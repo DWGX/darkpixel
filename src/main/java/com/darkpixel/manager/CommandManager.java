@@ -53,7 +53,7 @@ public class CommandManager implements CommandExecutor {
                 }
                 boolean enabled = !context.getConfigManager().getConfig("config.yml").getBoolean("sitting.enabled", true);
                 context.getConfigManager().getConfig("config.yml").set("sitting.enabled", enabled);
-                context.getConfigManager().saveConfig("config.yml");
+                Global.executor.submit(() -> context.getConfigManager().saveConfig("config.yml"));
                 context.updateSitUtils();
                 sender.sendMessage("§a坐下功能已" + (enabled ? "开启" : "关闭"));
                 return true;
@@ -76,7 +76,7 @@ public class CommandManager implements CommandExecutor {
                     }
                 } else if (args[0].equalsIgnoreCase("toggle")) {
                     context.getConfigManager().toggleSittingPermission(player);
-                    context.getConfigManager().saveConfig("config.yml");
+                    Global.executor.submit(() -> context.getConfigManager().saveConfig("config.yml"));
                     sender.sendMessage("§a坐下权限已切换为: " + context.getConfigManager().getSittingPermission(player));
                 }
                 return true;
@@ -111,7 +111,7 @@ public class CommandManager implements CommandExecutor {
         }
         try {
             int times = Integer.parseInt(args[1]);
-            context.getAiChat().setPlayerMessageLimit(target.getName(), times);
+            Global.executor.submit(() -> context.getAiChat().setPlayerMessageLimit(target.getName(), times));
             sender.sendMessage("§a已将 " + target.getName() + " 的聊天次数设置为 " + times);
         } catch (NumberFormatException e) {
             sender.sendMessage("§c次数必须是整数！");
