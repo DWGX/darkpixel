@@ -66,7 +66,12 @@ commands:
     description: Reload all configs
     usage: /<command>
     permission: darkpixel.admin
-
+  rank:
+    description: 管理玩家的 Rank
+    usage: /<command> <set|get|list> [player] [rank/score]
+  signin:
+    description: 打开签到界面
+    usage: /<command>
 permissions:
   darkpixel.giveblockablesword:
     description: 允许使用 /giveblockablesword 命令

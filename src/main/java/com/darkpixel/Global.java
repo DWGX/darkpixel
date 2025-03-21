@@ -8,20 +8,31 @@ import com.darkpixel.combat.bringBackBlocking.BringBackBlocking;
 import com.darkpixel.gui.DashboardHandler;
 import com.darkpixel.gui.ServerSwitchChest;
 import com.darkpixel.gui.ServerRadioChest;
+import com.darkpixel.gui.SignInContainer;
 import com.darkpixel.manager.CommandManager;
 import com.darkpixel.manager.ConfigManager;
 import com.darkpixel.npc.LobbyZombie;
 import com.darkpixel.npc.NpcHandler;
 import com.darkpixel.npc.RadioChestZombie;
 import com.darkpixel.npc.SwitchChestZombie;
+import com.darkpixel.rank.RankManager;
 import com.darkpixel.utils.LoginMessageUtil;
 import com.darkpixel.utils.MotdUtils;
 import com.darkpixel.utils.PlayerData;
 import com.darkpixel.utils.PlayerFreeze;
 import com.darkpixel.utils.SitUtils;
 import com.darkpixel.utils.WorldData;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitRunnable;
+
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -30,13 +41,14 @@ import java.util.concurrent.TimeUnit;
 public class Global {
     private final JavaPlugin plugin;
     private final ConfigManager configManager;
+    private final PlayerData playerData;
+    private final WorldData worldData;
+    private final RankManager rankManager;
     private final AiChatHandler aiChat;
     private final DashboardHandler dashboard;
     private final NpcHandler npcHandler;
     private final BringBackBlocking bringBackBlocking;
     private final LoginMessageUtil loginMessageUtil;
-    private final PlayerData playerData;
-    private final WorldData worldData;
     private final PlayerFreeze playerFreeze;
     private final MotdUtils motdUtils;
     private SitUtils sitUtils;
@@ -48,6 +60,7 @@ public class Global {
     private final SwitchChestZombie switchChestZombie;
     private final RadioChestZombie radioChestZombie;
     private final LobbyZombie lobbyZombie;
+    private final SignInContainer signInContainer;
     public static final ExecutorService executor = new ThreadPoolExecutor(
             Runtime.getRuntime().availableProcessors(),
             Runtime.getRuntime().availableProcessors() * 2,
@@ -63,6 +76,7 @@ public class Global {
         this.worldData = new WorldData(this);
         this.minigameConfig = configManager.getMinigameConfig();
         this.commandConfig = configManager.getCommandConfig();
+        this.rankManager = new RankManager(this);
         this.aiChat = initAiChat();
         this.bringBackBlocking = initBringBackBlocking();
         this.dashboard = initDashboard();
@@ -77,9 +91,36 @@ public class Global {
         this.motdUtils = new MotdUtils((Main) plugin);
         this.sitUtils = initSitUtils();
         this.antiCheatHandler = new AntiCheatHandler(this);
+        this.signInContainer = new SignInContainer(this, rankManager);
         new CommandManager(this);
         registerEvents();
         Global.executor.submit(() -> configManager.reloadAllConfigsAsync());
+        startOnlinePlayersUpdateTask(); // 添加定时任务
+    }
+
+    private void startOnlinePlayersUpdateTask() {
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                updateOnlinePlayersFile();
+            }
+        }.runTaskTimer(plugin, 0L, 100L); // 每5秒（100 ticks）更新一次
+    }
+
+    private void updateOnlinePlayersFile() {
+        File onlinePlayersFile = new File("D:/Project/darkpixel/data", "online_players.json");
+        Gson gson = new GsonBuilder().setPrettyPrinting().create();
+        Map<String, Object>[] players = plugin.getServer().getOnlinePlayers().stream().map(player -> {
+            Map<String, Object> playerData = new HashMap<>();
+            playerData.put("uuid", player.getUniqueId().toString());
+            playerData.put("name", player.getName());
+            return playerData;
+        }).toArray(Map[]::new);
+        try (FileWriter writer = new FileWriter(onlinePlayersFile)) {
+            gson.toJson(players, writer);
+        } catch (IOException e) {
+            plugin.getLogger().warning("Failed to update online_players.json: " + e.getMessage());
+        }
     }
 
     private AiChatHandler initAiChat() {
@@ -150,4 +191,6 @@ public class Global {
     public AntiCheatHandler getAntiCheatHandler() { return antiCheatHandler; }
     public ServerSwitchChest getServerSwitchChest() { return serverSwitchChest; }
     public ServerRadioChest getServerRadioChest() { return serverRadioChest; }
+    public RankManager getRankManager() { return rankManager; }
+    public SignInContainer getSignInContainer() { return signInContainer; }
 }

@@ -4,6 +4,7 @@ import com.darkpixel.Global;
 import com.darkpixel.ai.AiChatCommands;
 import com.darkpixel.combat.bringBackBlocking.GiveBlockableSword;
 import com.darkpixel.npc.NpcHandler;
+import com.darkpixel.rank.RankCommands;
 import com.darkpixel.utils.PingUtils;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -35,6 +36,7 @@ public class CommandManager implements CommandExecutor {
         plugin.getCommand("ping").setExecutor(this);
         plugin.getCommand("getswitchchest").setExecutor(context.getServerSwitchChest());
         plugin.getCommand("getradio").setExecutor(context.getServerRadioChest());
+        plugin.getCommand("rank").setExecutor(new RankCommands(context.getRankManager()));
     }
 
     @Override

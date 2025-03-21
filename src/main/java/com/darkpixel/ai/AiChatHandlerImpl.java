@@ -2,12 +2,12 @@ package com.darkpixel.ai;
 
 import com.darkpixel.Global;
 import com.darkpixel.manager.ConfigManager;
-import com.darkpixel.utils.LogUtil;
 import com.darkpixel.utils.PlayerData;
 import org.bukkit.Bukkit;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -50,7 +50,6 @@ public class AiChatHandlerImpl implements AiChatHandler {
         this.commandCache = buildCommandCache();
         chatConfig.loadConfig();
         chatHistory.loadChatHistoryAsync();
-        LogUtil.info("AI Chat 配置已重新加载");
     }
 
     private Map<String, String> buildCommandCache() {
@@ -99,7 +98,6 @@ public class AiChatHandlerImpl implements AiChatHandler {
     public void setPlayerModel(String player, String model) {
         if (config.getAvailableModels().contains(model)) {
             playerModels.put(player, model);
-            LogUtil.info("玩家 " + player + " 的AI模型切换为: " + model);
         }
     }
 
@@ -139,8 +137,10 @@ public class AiChatHandlerImpl implements AiChatHandler {
         String inventory = playerInfo.getInventoryDescription();
         String effects = playerInfo.getEffectsDescription();
         String worldResources = context.getWorldData().analyzeWorld(player.getWorld());
+        String rank = context.getRankManager().getRank(player);
+        String score = String.valueOf(context.getRankManager().getScore(player));
         chatHistory.addMessage(player.getName(), "用户: " + message);
-        return buildPrompt(player.getName(), message, playerContext, inventory, effects, worldResources, false);
+        return buildPrompt(player.getName(), message, playerContext + ", Rank: " + rank + ", 分数: " + score, inventory, effects, worldResources, false);
     }
 
     @Override
@@ -168,7 +168,6 @@ public class AiChatHandlerImpl implements AiChatHandler {
     @Override
     public void setPlayerMessageLimit(String player, int limit) {
         chatConfig.setPlayerMessageLimit(player, limit);
-        LogUtil.info("设置玩家 " + player + " 的消息上限为: " + limit);
     }
 
     @Override
@@ -246,7 +245,6 @@ public class AiChatHandlerImpl implements AiChatHandler {
         }
     }
 
-
     private void executeAdminRequest(Player player, String prompt, String originalMessage) {
         String name = player.getName();
         Global.executor.submit(() -> {
@@ -273,7 +271,6 @@ public class AiChatHandlerImpl implements AiChatHandler {
                         Bukkit.broadcastMessage("§c[AI管理员] " + name + ": " + originalMessage);
                         executeCommands(fallbackResp, name, player);
                     });
-                    LogUtil.severe("AI 管理员请求异常: " + throwable.getMessage());
                     return null;
                 });
             } catch (Exception e) {
@@ -283,7 +280,6 @@ public class AiChatHandlerImpl implements AiChatHandler {
                     Bukkit.broadcastMessage("§c[AI管理员] " + name + ": " + originalMessage);
                     executeCommands(fallbackResp, name, player);
                 });
-                LogUtil.severe("AI 管理员请求处理失败: " + e.getMessage());
             }
         });
     }
@@ -324,12 +320,10 @@ public class AiChatHandlerImpl implements AiChatHandler {
                     });
                 }).exceptionally(throwable -> {
                     Bukkit.getScheduler().runTask(config.getPlugin(), () -> player.sendMessage("§cAI 请求失败，请稍后再试！"));
-                    LogUtil.severe("AI 请求异常: " + throwable.getMessage());
                     return null;
                 });
             } catch (Exception e) {
                 Bukkit.getScheduler().runTask(config.getPlugin(), () -> player.sendMessage("§cAI 处理失败，请联系管理员！"));
-                LogUtil.severe("AI 请求处理失败: " + e.getMessage());
             }
         });
     }
@@ -345,10 +339,8 @@ public class AiChatHandlerImpl implements AiChatHandler {
                     try {
                         Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command.substring(1));
                         Bukkit.broadcastMessage("§c[AI执行] " + playerName + ": " + command);
-                        LogUtil.info("成功执行命令: " + command + " for " + playerName);
                     } catch (Exception e) {
                         Bukkit.broadcastMessage("§c[" + aiName + "错误] 命令执行失败: " + e.getMessage());
-                        LogUtil.severe("命令执行失败: " + command + " - " + e.getMessage());
                     }
                 }
             }.runTaskLater(config.getPlugin(), i * 10L);
@@ -366,5 +358,4 @@ public class AiChatHandlerImpl implements AiChatHandler {
             }
         }.runTaskTimerAsynchronously(config.getPlugin(), 0L, resetInterval);
     }
-
 }

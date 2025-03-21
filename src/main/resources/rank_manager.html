@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Rank 管理</title>
+    <style>
+        body { font-family: 'Microsoft YaHei', Arial, sans-serif; background: #f0f0f0; margin: 0; padding: 0; }
+        .container { display: flex; flex-direction: column; gap: 20px; padding: 20px; max-width: 1200px; margin: 0 auto; }
+        .groups { display: flex; flex-wrap: wrap; gap: 20px; }
+        .group { border: 1px solid #ddd; padding: 10px; width: 300px; min-height: 150px; background: #fff; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); transition: transform 0.2s; }
+        .group:hover { transform: scale(1.02); }
+        .group h3 { margin: 0 0 10px; font-size: 18px; }
+        .group ul { list-style: none; padding: 0; min-height: 100px; }
+        .group li { display: flex; align-items: center; gap: 10px; padding: 5px; background: #f9f9f9; margin-bottom: 5px; border-radius: 3px; transition: background 0.2s; }
+        .group li:hover { background: #e0e0e0; }
+        .group li img { width: 32px; height: 32px; border-radius: 50%; }
+        .group li.draggable { cursor: move; }
+        .group li.over { border: 2px dashed #000; }
+        .online-players { border: 1px solid #ddd; padding: 10px; background: #fff; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .online-players input { margin-bottom: 10px; padding: 5px; width: 100%; border: 1px solid #ccc; border-radius: 3px; }
+        .online-players ul { list-style: none; padding: 0; }
+        .online-players li { display: flex; align-items: center; gap: 10px; padding: 5px; background: #f0f0f0; margin-bottom: 5px; border-radius: 3px; transition: background 0.2s; }
+        .online-players li:hover { background: #d0d0d0; }
+        .online-players li img { width: 32px; height: 32px; border-radius: 50%; }
+        .online-players li.draggable { cursor: move; }
+        button { padding: 5px 10px; margin: 2px; background: #4CAF50; color: white; border: none; border-radius: 3px; cursor: pointer; transition: background 0.2s; }
+        button:hover { background: #45a049; }
+        .edit-group { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border-radius: 5px; box-shadow: 0 0 10px rgba(0,0,0,0.3); z-index: 1000; }
+        .edit-group input { margin-bottom: 10px; padding: 5px; width: 100%; border: 1px solid #ccc; border-radius: 3px; }
+        .fade-in { animation: fadeIn 0.5s; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    </style>
+</head>
+<body>
+<div class="container fade-in">
+    <h1>Rank 管理</h1>
+    <div>
+        <h2>创建新群组</h2>
+        <input id="groupName" placeholder="群组名称">
+        <button onclick="createGroup()">创建群组</button>
+    </div>
+    <div class="groups" id="groups"></div>
+    <div class="online-players">
+        <h2>在线玩家</h2>
+        <input id="search" placeholder="按名称搜索..." oninput="filterPlayers()">
+        <ul id="onlinePlayers"></ul>
+    </div>
+</div>
+<div class="edit-group" id="editGroupForm">
+    <h3>编辑群组</h3>
+    <input id="editGroupName" placeholder="群组名称" readonly>
+    <input id="editGroupColor" placeholder="颜色">
+    <input id="editGroupEmoji" placeholder="Emoji">
+    <input id="editGroupBadge" placeholder="名牌">
+    <button onclick="saveGroupEdit()">保存</button>
+    <button onclick="closeEditForm()">取消</button>
+</div>
+
+<script>
+    const ranksApiUrl = 'http://localhost:8080/ranks';
+    const onlinePlayersApiUrl = 'http://localhost:8080/online-players';
+    const groupsApiUrl = 'http://localhost:8080/groups';
+    let ranks = {};
+    let groups = {};
+    let currentEditGroup = null;
+
+    async function loadData() {
+        const ranksRes = await fetch(ranksApiUrl);
+        ranks = await ranksRes.json();
+        const groupsRes = await fetch(groupsApiUrl);
+        groups = await groupsRes.json();
+        loadGroups();
+        loadOnlinePlayers();
+    }
+
+    function loadGroups() {
+        const groupsDiv = document.getElementById('groups');
+        groupsDiv.innerHTML = '';
+        for (const [groupName, groupData] of Object.entries(groups.groups)) {
+            const groupDiv = document.createElement('div');
+            groupDiv.className = 'group fade-in';
+            groupDiv.innerHTML = `
+                    <h3>${groupName} <button onclick="editGroup('${groupName}')">编辑</button> ${
+                ['default', 'op', 'visitor'].includes(groupName) ? '' :
+                    `<button onclick="deleteGroup('${groupName}')">删除</button>`
+            }</h3>
+                    <ul id="group_${groupName}"></ul>
+                `;
+            const ul = groupDiv.querySelector('ul');
+            for (const uuid in groups.playerGroups) {
+                if (groups.playerGroups[uuid].includes(groupName)) {
+                    const player = ranks[uuid];
+                    if (player) {
+                        const li = document.createElement('li');
+                        li.className = 'draggable';
+                        li.draggable = true;
+                        li.dataset.uuid = uuid;
+                        li.innerHTML = `
+                            <img src="${player.avatar}" alt="${player.name}">
+                            <span>${player.name} (${player.rank}, 积分: ${player.score})</span>
+                            <button onclick="toggleEffects('${uuid}')">${player.enableEffects ? '关闭特效' : '开启特效'}</button>
+                        `;
+                        ul.appendChild(li);
+                    }
+                }
+            }
+            ul.addEventListener('dragover', e => e.preventDefault());
+            ul.addEventListener('dragenter', e => e.target.closest('ul').classList.add('over'));
+            ul.addEventListener('dragleave', e => e.target.closest('ul').classList.remove('over'));
+            ul.addEventListener('drop', e => {
+                e.preventDefault();
+                const ul = e.target.closest('ul');
+                ul.classList.remove('over');
+                const uuid = e.dataTransfer.getData('text/plain');
+                if (!groups.playerGroups[uuid].includes(groupName)) {
+                    groups.playerGroups[uuid].push(groupName);
+                    saveGroups();
+                    loadGroups();
+                }
+            });
+            groupsDiv.appendChild(groupDiv);
+        }
+    }
+
+    async function loadOnlinePlayers() {
+        const onlinePlayersRes = await fetch(onlinePlayersApiUrl);
+        const onlinePlayers = await onlinePlayersRes.json();
+        const ul = document.getElementById('onlinePlayers');
+        ul.innerHTML = '';
+        for (const player of onlinePlayers) {
+            const li = document.createElement('li');
+            li.className = 'draggable fade-in';
+            li.draggable = true;
+            li.dataset.uuid = player.uuid;
+            li.innerHTML = `
+                    <img src="${player.avatar}" alt="${player.name}">
+                    <span>${player.name} (${player.rank}, 积分: ${player.score})</span>
+                    <button onclick="addToGroup('${player.uuid}')">+</button>
+                `;
+            li.addEventListener('dragstart', e => e.dataTransfer.setData('text/plain', player.uuid));
+            ul.appendChild(li);
+        }
+    }
+
+    function filterPlayers() {
+        const search = document.getElementById('search').value.toLowerCase();
+        const ul = document.getElementById('onlinePlayers');
+        const lis = ul.getElementsByTagName('li');
+        for (const li of lis) {
+            const name = li.querySelector('span').textContent.toLowerCase();
+            li.style.display = name.includes(search) ? '' : 'none';
+        }
+    }
+
+    function createGroup() {
+        const groupName = document.getElementById('groupName').value.trim();
+        if (!groupName || groups.groups[groupName]) {
+            alert('群组名称为空或已存在！');
+            return;
+        }
+        fetch('http://localhost:8080/groups/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ groupName })
+        }).then(res => res.text()).then(message => {
+            console.log(message);
+            loadData();
+        });
+        document.getElementById('groupName').value = '';
+    }
+
+    function editGroup(groupName) {
+        currentEditGroup = groupName;
+        const group = groups.groups[groupName];
+        document.getElementById('editGroupName').value = group.name;
+        document.getElementById('editGroupColor').value = group.color;
+        document.getElementById('editGroupEmoji').value = group.emoji;
+        document.getElementById('editGroupBadge').value = group.badge;
+        document.getElementById('editGroupForm').style.display = 'block';
+    }
+
+    function saveGroupEdit() {
+        const groupName = currentEditGroup;
+        const color = document.getElementById('editGroupColor').value.trim();
+        const emoji = document.getElementById('editGroupEmoji').value.trim();
+        const badge = document.getElementById('editGroupBadge').value.trim();
+        fetch('http://localhost:8080/groups/edit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ groupName, color, emoji, badge })
+        }).then(res => res.text()).then(message => {
+            console.log(message);
+            loadData();
+            closeEditForm();
+        });
+    }
+
+    function closeEditForm() {
+        document.getElementById('editGroupForm').style.display = 'none';
+    }
+
+    function deleteGroup(groupName) {
+        if (['default', 'op', 'visitor'].includes(groupName)) {
+            alert('不能删除默认群组！');
+            return;
+        }
+        if (confirm(`确认删除群组 ${groupName} 吗？`)) {
+            delete groups.groups[groupName];
+            for (const uuid in groups.playerGroups) {
+                groups.playerGroups[uuid] = groups.playerGroups[uuid].filter(g => g !== groupName);
+            }
+            saveGroups();
+            loadGroups();
+        }
+    }
+
+    function addToGroup(uuid) {
+        const groupName = prompt('输入要添加的群组名称:');
+        if (!groupName || !groups.groups[groupName]) {
+            alert('群组不存在！');
+            return;
+        }
+        if (!groups.playerGroups[uuid]) groups.playerGroups[uuid] = [];
+        if (!groups.playerGroups[uuid].includes(groupName)) {
+            groups.playerGroups[uuid].push(groupName);
+            saveGroups();
+            loadGroups();
+        }
+    }
+
+    function toggleEffects(uuid) {
+        fetch('http://localhost:8080/toggle-effects', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ uuid })
+        }).then(() => loadGroups());
+    }
+
+    function saveGroups() {
+        fetch(groupsApiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(groups)
+        }).then(res => res.text()).then(message => console.log(message));
+    }
+
+    loadData();
+    setInterval(loadOnlinePlayers, 5000);
+</script>
+</body>
+</html>
