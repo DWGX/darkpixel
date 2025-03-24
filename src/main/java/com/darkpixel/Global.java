@@ -15,24 +15,12 @@ import com.darkpixel.npc.LobbyZombie;
 import com.darkpixel.npc.NpcHandler;
 import com.darkpixel.npc.RadioChestZombie;
 import com.darkpixel.npc.SwitchChestZombie;
-import com.darkpixel.rank.RankManager;
-import com.darkpixel.utils.LoginMessageUtil;
-import com.darkpixel.utils.MotdUtils;
-import com.darkpixel.utils.PlayerData;
-import com.darkpixel.utils.PlayerFreeze;
-import com.darkpixel.utils.SitUtils;
-import com.darkpixel.utils.WorldData;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
+import com.darkpixel.rank.*;
+import com.darkpixel.utils.*;
+import com.darkpixel.utils.effects.PlayerJoinEffects;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.scheduler.BukkitRunnable;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -61,6 +49,8 @@ public class Global {
     private final RadioChestZombie radioChestZombie;
     private final LobbyZombie lobbyZombie;
     private final SignInContainer signInContainer;
+    private final RankServer rankServer; // 新增 RankServer 实例
+
     public static final ExecutorService executor = new ThreadPoolExecutor(
             Runtime.getRuntime().availableProcessors(),
             Runtime.getRuntime().availableProcessors() * 2,
@@ -77,9 +67,9 @@ public class Global {
         this.minigameConfig = configManager.getMinigameConfig();
         this.commandConfig = configManager.getCommandConfig();
         this.rankManager = new RankManager(this);
-        this.aiChat = initAiChat();
-        this.bringBackBlocking = initBringBackBlocking();
-        this.dashboard = initDashboard();
+        this.aiChat = new AiChatHandlerImpl(configManager, this);
+        this.bringBackBlocking = configManager.getConfig().getBoolean("blocking.enabled", true) ? new BringBackBlocking(this) : null;
+        this.dashboard = configManager.getConfig().getBoolean("dashboard_enabled", true) ? new DashboardHandler(plugin, aiChat, configManager, this) : null;
         this.serverSwitchChest = new ServerSwitchChest(this);
         this.serverRadioChest = new ServerRadioChest(this);
         this.npcHandler = new NpcHandler(configManager, dashboard, serverSwitchChest, serverRadioChest);
@@ -87,74 +77,18 @@ public class Global {
         this.radioChestZombie = new RadioChestZombie(serverRadioChest);
         this.lobbyZombie = new LobbyZombie(dashboard);
         this.loginMessageUtil = new LoginMessageUtil(this);
-        this.playerFreeze = initPlayerFreeze();
+        this.playerFreeze = configManager.getConfig().getBoolean("freeze.enabled", true) ? new PlayerFreeze(this) : null;
         this.motdUtils = new MotdUtils((Main) plugin);
-        this.sitUtils = initSitUtils();
+        this.sitUtils = configManager.getConfig().getBoolean("sitting.enabled", true) ? new SitUtils(this) : null;
         this.antiCheatHandler = new AntiCheatHandler(this);
         this.signInContainer = new SignInContainer(this, rankManager);
+        this.rankServer = new RankServer(rankManager, playerData); // 初始化 RankServer
+
         new CommandManager(this);
-        registerEvents();
-        Global.executor.submit(() -> configManager.reloadAllConfigsAsync());
-        startOnlinePlayersUpdateTask(); // 添加定时任务
-    }
-
-    private void startOnlinePlayersUpdateTask() {
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                updateOnlinePlayersFile();
-            }
-        }.runTaskTimer(plugin, 0L, 100L); // 每5秒（100 ticks）更新一次
-    }
-
-    private void updateOnlinePlayersFile() {
-        File onlinePlayersFile = new File("D:/Project/darkpixel/data", "online_players.json");
-        Gson gson = new GsonBuilder().setPrettyPrinting().create();
-        Map<String, Object>[] players = plugin.getServer().getOnlinePlayers().stream().map(player -> {
-            Map<String, Object> playerData = new HashMap<>();
-            playerData.put("uuid", player.getUniqueId().toString());
-            playerData.put("name", player.getName());
-            return playerData;
-        }).toArray(Map[]::new);
-        try (FileWriter writer = new FileWriter(onlinePlayersFile)) {
-            gson.toJson(players, writer);
-        } catch (IOException e) {
-            plugin.getLogger().warning("Failed to update online_players.json: " + e.getMessage());
-        }
-    }
-
-    private AiChatHandler initAiChat() {
-        return new AiChatHandlerImpl(configManager, this);
-    }
-
-    private BringBackBlocking initBringBackBlocking() {
-        return configManager.getConfig().getBoolean("blocking.enabled", true) ? new BringBackBlocking(this) : null;
-    }
-
-    private DashboardHandler initDashboard() {
-        return configManager.getConfig().getBoolean("dashboard_enabled", true) ?
-                new DashboardHandler(plugin, aiChat, configManager, this) : null;
-    }
-
-    private PlayerFreeze initPlayerFreeze() {
-        return configManager.getConfig().getBoolean("freeze.enabled", true) ? new PlayerFreeze(this) : null;
-    }
-
-    private SitUtils initSitUtils() {
-        return configManager.getConfig().getBoolean("sitting.enabled", true) ? new SitUtils(this) : null;
-    }
-
-    public void updateSitUtils() {
-        boolean enabled = configManager.getConfig().getBoolean("sitting.enabled", true);
-        if (enabled && sitUtils == null) {
-            sitUtils = new SitUtils(this);
-            plugin.getServer().getPluginManager().registerEvents(sitUtils, plugin);
-        } else if (!enabled && sitUtils != null) {
-            sitUtils = null;
-        }
-    }
-
-    private void registerEvents() {
+        plugin.getServer().getPluginManager().registerEvents(new ChatListener(playerData, rankManager), plugin);
+        plugin.getServer().getPluginManager().registerEvents(new PlayerJoinEffects(playerData), plugin);
+        plugin.getCommand("toggleeffects").setExecutor(new ToggleEffectsCommand(playerData));
+        plugin.getCommand("rank").setExecutor(new RankCommands(rankManager));
         if (bringBackBlocking != null && configManager.getConfig().getBoolean("enable_bring_back_blocking", true)) {
             plugin.getServer().getPluginManager().registerEvents(bringBackBlocking, plugin);
         }
@@ -171,8 +105,20 @@ public class Global {
         plugin.getServer().getPluginManager().registerEvents(antiCheatHandler, plugin);
         plugin.getServer().getPluginManager().registerEvents(serverSwitchChest, plugin);
         plugin.getServer().getPluginManager().registerEvents(serverRadioChest, plugin);
+        Global.executor.submit(() -> configManager.reloadAllConfigsAsync());
     }
 
+    public void updateSitUtils() {
+        boolean enabled = configManager.getConfig().getBoolean("sitting.enabled", true);
+        if (enabled && sitUtils == null) {
+            sitUtils = new SitUtils(this);
+            plugin.getServer().getPluginManager().registerEvents(sitUtils, plugin);
+        } else if (!enabled && sitUtils != null) {
+            sitUtils = null;
+        }
+    }
+
+    // Getter 方法
     public JavaPlugin getPlugin() { return plugin; }
     public ConfigManager getConfigManager() { return configManager; }
     public YamlConfiguration getConfig() { return configManager.getConfig(); }
@@ -193,4 +139,5 @@ public class Global {
     public ServerRadioChest getServerRadioChest() { return serverRadioChest; }
     public RankManager getRankManager() { return rankManager; }
     public SignInContainer getSignInContainer() { return signInContainer; }
+    public RankServer getRankServer() { return rankServer; } // 新增 RankServer getter
 }

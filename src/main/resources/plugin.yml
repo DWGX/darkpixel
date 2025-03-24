@@ -72,6 +72,9 @@ commands:
   signin:
     description: 打开签到界面
     usage: /<command>
+  toggleeffects:
+    description: 开关进服特效
+    usage: /<command>
 permissions:
   darkpixel.giveblockablesword:
     description: 允许使用 /giveblockablesword 命令

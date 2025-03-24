@@ -194,7 +194,7 @@ public class AntiCheatHandler implements Listener, CommandExecutor, TabCompleter
             @Override
             public void run() {
                 saveHistory();
-                LogUtil.info("Anti-cheat history synced");
+                //LogUtil.info("Anti-cheat history synced");
             }
         }.runTaskTimer(context.getPlugin(), 1200L, 1200L);
     }

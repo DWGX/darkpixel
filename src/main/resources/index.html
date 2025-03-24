@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>黑像素服务器管理面板</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            margin: 20px;
+            background-color: #f0f0f0;
+            color: #333;
+        }
+        h1 {
+            color: #2c3e50;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        .section {
+            margin-bottom: 20px;
+        }
+        label {
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        input, select {
+            padding: 5px;
+            margin-right: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            padding: 8px 15px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        #onlinePlayers, #response {
+            margin-top: 20px;
+            padding: 10px;
+            background: #ecf0f1;
+            border-radius: 4px;
+        }
+        ul {
+            list-style: none;
+            padding: 0;
+        }
+        li {
+            padding: 5px 0;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>黑像素服务器管理面板</h1>
+
+    <div class="section">
+        <h2>玩家管理</h2>
+        <label>玩家名:</label>
+        <input type="text" id="playerName">
+        <button onclick="getPlayerData()">获取数据</button>
+        <button onclick="setParticle()">设置粒子</button>
+        <button onclick="setEffects()">切换特效</button>
+        <button onclick="setGroup()">设置身份组</button>
+    </div>
+
+    <div class="section">
+        <label>粒子效果:</label>
+        <select id="particle">
+            <option value="FIREWORK">烟花</option>
+            <option value="FLAME">火焰</option>
+            <option value="HEART">爱心</option>
+            <option value="VILLAGER_HAPPY">村民开心</option>
+            <option value="DRAGON_BREATH">龙息</option>
+            <option value="ENCHANTMENT_TABLE">附魔台</option>
+        </select>
+    </div>
+
+    <div class="section">
+        <label>身份组:</label>
+        <input type="text" id="group" placeholder="例如: default, op">
+    </div>
+
+    <div class="section">
+        <label>进服特效:</label>
+        <input type="checkbox" id="effectsEnabled">
+    </div>
+
+    <div class="section">
+        <button onclick="listOnlinePlayers()">刷新在线玩家</button>
+        <div id="onlinePlayers"></div>
+    </div>
+
+    <div class="section">
+        <pre id="response"></pre>
+    </div>
+</div>
+
+<script>
+    const apiBaseUrl = 'http://localhost:25567/api';
+
+    function sendRequest(endpoint, params, callback) {
+        const url = `${apiBaseUrl}/${endpoint}?${new URLSearchParams(params).toString()}`;
+        fetch(url, { method: 'GET' })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('response').textContent = JSON.stringify(data, null, 2);
+                if (callback) callback(data);
+            })
+            .catch(error => {
+                console.error('请求失败:', error);
+                document.getElementById('response').textContent = `错误: ${error.message}`;
+            });
+    }
+
+    function getPlayerData() {
+        const playerName = document.getElementById('playerName').value.trim();
+        if (!playerName) {
+            alert('请输入玩家名！');
+            return;
+        }
+        sendRequest('get_player_data', { player: playerName }, (data) => {
+            if (data.status === 'success') {
+                document.getElementById('effectsEnabled').checked = data.data.effectsEnabled;
+            }
+        });
+    }
+
+    function setParticle() {
+        const playerName = document.getElementById('playerName').value.trim();
+        const particle = document.getElementById('particle').value;
+        if (!playerName) {
+            alert('请输入玩家名！');
+            return;
+        }
+        sendRequest('set_particle', { player: playerName, particle: particle });
+    }
+
+    function setGroup() {
+        const playerName = document.getElementById('playerName').value.trim();
+        const group = document.getElementById('group').value.trim();
+        if (!playerName || !group) {
+            alert('请输入玩家名和身份组！');
+            return;
+        }
+        sendRequest('set_group', { player: playerName, group: group });
+    }
+
+    function setEffects() {
+        const playerName = document.getElementById('playerName').value.trim();
+        const enabled = document.getElementById('effectsEnabled').checked;
+        if (!playerName) {
+            alert('请输入玩家名！');
+            return;
+        }
+        sendRequest('set_effects', { player: playerName, enabled: enabled });
+    }
+
+    function listOnlinePlayers() {
+        sendRequest('online_players', {}, (data) => {
+            if (data.status === 'success') {
+                const players = data.players || [];
+                document.getElementById('onlinePlayers').innerHTML = '<h2>在线玩家</h2><ul>' +
+                    players.map(player => `<li>${player}</li>`).join('') + '</ul>';
+            }
+        });
+    }
+
+    // 页面加载时自动刷新在线玩家
+    window.onload = listOnlinePlayers;
+</script>
+</body>
+</html>

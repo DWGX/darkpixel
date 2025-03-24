@@ -1,7 +1,7 @@
 package com.darkpixel.gui;
 
 import com.darkpixel.Global;
-import com.darkpixel.rank.PlayerRank;
+import com.darkpixel.rank.RankData;
 import com.darkpixel.rank.RankManager;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -47,14 +47,17 @@ public class SignInContainer implements Listener {
 
     private void openSignInInventory(Player player) {
         Inventory inv = Bukkit.createInventory(null, 27, "§a每日签到");
-        PlayerRank playerRank = rankManager.getAllRanks().getOrDefault(player.getUniqueId(), new PlayerRank(player.getName()));
+        RankData rankData = rankManager.getAllRanks().getOrDefault(player.getUniqueId(), new RankData("member", 0));
+        long lastSignIn = getLastSignIn(player);
+        int signInCount = getSignInCount(player);
         long currentTime = System.currentTimeMillis();
-        boolean canSignIn = currentTime - playerRank.getLastSignIn() >= SIGN_IN_COOLDOWN;
+        boolean canSignIn = currentTime - lastSignIn >= SIGN_IN_COOLDOWN;
 
         ItemStack signInButton = new ItemStack(canSignIn ? Material.EMERALD : Material.REDSTONE);
         ItemMeta meta = signInButton.getItemMeta();
         meta.setDisplayName(canSignIn ? "§a点击签到" : "§c已签到，明天再来");
-        meta.setLore(Arrays.asList("§7签到次数: " + playerRank.getSignInCount(), "§7上次签到: " + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date(playerRank.getLastSignIn()))));
+        meta.setLore(Arrays.asList("§7签到次数: " + signInCount,
+                "§7上次签到: " + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date(lastSignIn))));
         signInButton.setItemMeta(meta);
         inv.setItem(13, signInButton);
 
@@ -71,23 +74,43 @@ public class SignInContainer implements Listener {
         event.setCancelled(true);
         if (event.getSlot() != 13) return;
 
-        PlayerRank playerRank = rankManager.getAllRanks().getOrDefault(player.getUniqueId(), new PlayerRank(player.getName()));
+        RankData rankData = rankManager.getAllRanks().getOrDefault(player.getUniqueId(), new RankData("member", 0));
         long currentTime = System.currentTimeMillis();
-        if (currentTime - playerRank.getLastSignIn() < SIGN_IN_COOLDOWN) {
+        long lastSignIn = getLastSignIn(player);
+        int signInCount = getSignInCount(player);
+
+        if (currentTime - lastSignIn < SIGN_IN_COOLDOWN) {
             player.sendMessage("§c你今天已经签到过了，请明天再来！");
             return;
         }
 
-        playerRank.setLastSignIn(currentTime);
-        playerRank.setSignInCount(playerRank.getSignInCount() + 1);
-        playerRank.setScore(playerRank.getScore() + 10);
-        rankManager.saveRanks();
-        player.sendMessage("§a签到成功！签到次数: " + playerRank.getSignInCount() + "，分数 +10，新分数: " + playerRank.getScore());
+        setLastSignIn(player, currentTime);
+        int newSignInCount = signInCount + 1;
+        setSignInCount(player, newSignInCount);
+        int newScore = rankData.getScore() + 10;
+        rankManager.setRank(player, rankData.getRank(), newScore); // 使用修复后的方法
+        player.sendMessage("§a签到成功！签到次数: " + newSignInCount + "，分数 +10，新分数: " + newScore);
         player.closeInventory();
     }
 
     @EventHandler
     public void onInventoryClose(InventoryCloseEvent event) {
         openInventories.remove(event.getPlayer().getUniqueId());
+    }
+
+    private long getLastSignIn(Player player) {
+        return context.getPlayerData().getLastSignIn(player);
+    }
+
+    private void setLastSignIn(Player player, long time) {
+        context.getPlayerData().setLastSignIn(player, time);
+    }
+
+    private int getSignInCount(Player player) {
+        return context.getPlayerData().getSignInCount(player);
+    }
+
+    private void setSignInCount(Player player, int count) {
+        context.getPlayerData().setSignInCount(player, count);
     }
 }

@@ -1,5 +1,6 @@
 package com.darkpixel.rank;
 
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
@@ -13,6 +14,9 @@ public class RankEvents implements Listener {
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
-        rankManager.setRank(event.getPlayer(), rankManager.getRank(event.getPlayer()), rankManager.getScore(event.getPlayer()));
+        Player player = event.getPlayer();
+        if (!rankManager.getAllRanks().containsKey(player.getUniqueId())) {
+            rankManager.setRank(player, "member", 0); // 使用修复后的方法
+        }
     }
 }

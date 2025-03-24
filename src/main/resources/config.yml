@@ -1,4 +1,14 @@
-api_key: "" # 请替换为有效的 DeepSeek API Key
+#数据库
+mysql:
+  host: "localhost"
+  port: 3306
+  database: "darkpixel"
+  username: "root"
+  password: "dwgx0705"
+http_port: 25567
+
+# AI
+api_key: ""
 ai_name: "dwgx"
 available_models:
   - deepseek-chat
@@ -28,23 +38,30 @@ ai_welcome_interval: 3600000
 message_reset_interval: 72000
 chat_history_max_size: 10
 
+# 格挡机制
 blocking:
   enabled: true
   damage-reduce-percentage: 50
   reduce-only-entity-damage: true
   enable-vanilla-blocking: true
 
+# NPC 配置 这三个都是为了minigames！真的! 如果不是这个地图 你自己修改
 npc_enabled: true
 npc_locations:
-  - world,188.500000,125.000000,30.500000,179.999634,11.250050,auto_107
+  - world,188.500000,125.000000,30.500000,179.999634,11.250050,auto_59
+  - world,189.611261,124.000000,30.355227,178.856628,1.056661,radioChest
+  - world,187.400446,124.000000,30.225039,178.856628,1.056661,switchChest
 
+# 仪表盘配置
 dashboard_enabled: true
 dashboard_chat_limit: 5
 
+# 冻结配置
 freeze:
   enabled: true
   persist_across_relog: false
 
+# 坐下功能配置
 sitting:
   enabled: true
   allowSittingOnBlocks: true

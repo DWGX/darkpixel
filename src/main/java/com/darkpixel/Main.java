@@ -1,35 +1,90 @@
 package com.darkpixel;
 
+import com.darkpixel.rank.RankServer;
 import com.darkpixel.utils.LogUtil;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.plugin.java.JavaPlugin;
+
 import java.util.concurrent.TimeUnit;
 
 public final class Main extends JavaPlugin {
     private Global context;
+    private Thread rankServerThread;
 
     @Override
     public void onEnable() {
-        LogUtil.init(this);
-        context = new Global(this);
-        getLogger().info("DarkPixel 已启动");
+        try {
+            // 确保 LogUtil 在任何操作前初始化
+            LogUtil.init(this);
+            getLogger().info("正在初始化 LogUtil...");
+
+            // 初始化 Global
+            context = new Global(this);
+            getLogger().info("Global 初始化完成");
+
+            // 启动 RankServer 线程
+            rankServerThread = new Thread(context.getRankServer(), "RankServer-Thread");
+            rankServerThread.start();
+            getLogger().info("RankServer 线程已启动");
+
+            getLogger().info("DarkPixel v1.0 已成功启用");
+        } catch (Exception e) {
+            getLogger().severe("DarkPixel 初始化失败: " + e.getMessage());
+            e.printStackTrace();
+            setEnabled(false); // 初始化失败时禁用插件
+        }
     }
 
     @Override
     public void onDisable() {
-        Global.executor.shutdown();
         try {
-            if (!Global.executor.awaitTermination(15, TimeUnit.SECONDS)) {
-                var pendingTasks = Global.executor.shutdownNow();
-                getLogger().warning("线程池强制关闭，" + pendingTasks.size() + " 个任务未完成");
+            // 保存 RankManager 数据
+            if (context != null && context.getRankManager() != null) {
+                context.getRankManager().saveAll();
+                getLogger().info("RankManager 数据已保存");
+            } else {
+                getLogger().warning("RankManager 未初始化，跳过保存");
             }
-        } catch (InterruptedException e) {
-            Global.executor.shutdownNow();
-            getLogger().severe("线程池关闭失败: " + e.getMessage());
-            Thread.currentThread().interrupt();
+
+            // 关闭 RankServer 线程
+            if (context != null && context.getRankServer() != null) {
+                context.getRankServer().shutdown();
+                if (rankServerThread != null && rankServerThread.isAlive()) {
+                    rankServerThread.interrupt();
+                    rankServerThread.join(5000); // 等待最多 5 秒
+                    if (rankServerThread.isAlive()) {
+                        getLogger().warning("RankServer 线程未能及时关闭");
+                    } else {
+                        getLogger().info("RankServer 线程已关闭");
+                    }
+                }
+            } else {
+                getLogger().warning("RankServer 未初始化，跳过关闭");
+            }
+
+            // 关闭线程池
+            if (!Global.executor.isShutdown()) {
+                Global.executor.shutdown();
+                try {
+                    if (!Global.executor.awaitTermination(15, TimeUnit.SECONDS)) {
+                        var pendingTasks = Global.executor.shutdownNow();
+                        getLogger().warning("线程池强制关闭，剩余 " + pendingTasks.size() + " 个未完成任务");
+                    } else {
+                        getLogger().info("线程池已优雅关闭");
+                    }
+                } catch (InterruptedException e) {
+                    Global.executor.shutdownNow();
+                    getLogger().severe("线程池关闭被中断: " + e.getMessage());
+                    Thread.currentThread().interrupt();
+                }
+            }
+
+            getLogger().info("DarkPixel v1.0 已成功禁用");
+        } catch (Exception e) {
+            getLogger().severe("DarkPixel 禁用过程中出错: " + e.getMessage());
+            e.printStackTrace();
         }
-        getLogger().info("DarkPixel 已关闭");
     }
 
     @Override
@@ -39,9 +94,20 @@ public final class Main extends JavaPlugin {
                 sender.sendMessage("§c你没有权限执行此命令！");
                 return true;
             }
+            if (context == null) {
+                sender.sendMessage("§c插件未正确初始化，无法重新加载配置！");
+                return true;
+            }
             Global.executor.submit(() -> {
-                context.getConfigManager().reloadAllConfigsAsync();
-                sender.sendMessage("§a所有配置文件已重新加载！");
+                try {
+                    context.getConfigManager().reloadAllConfigsAsync();
+                    context.getRankManager().reload();
+                    sender.sendMessage("§a所有配置文件已重新加载！");
+                } catch (Exception e) {
+                    sender.sendMessage("§c重新加载配置失败: " + e.getMessage());
+                    getLogger().severe("重新加载配置失败: " + e.getMessage());
+                    e.printStackTrace();
+                }
             });
             return true;
         }

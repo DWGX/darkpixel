@@ -1,5 +1,6 @@
 package com.darkpixel.npc;
 
+import com.darkpixel.Global;
 import com.darkpixel.gui.DashboardHandler;
 import com.darkpixel.gui.ServerSwitchChest;
 import com.darkpixel.gui.ServerRadioChest;
@@ -45,58 +46,48 @@ public class NpcHandler implements Listener, CommandExecutor, TabCompleter {
     }
 
     private void loadNpcsPersistently() {
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                reloadMissingNpcs();
-            }
-        }.runTask(configManager.getPlugin());
+        // 在主线程中加载 NPC，避免异步操作
+        Bukkit.getScheduler().runTask(configManager.getPlugin(), () -> {
+            reloadMissingNpcs();
+            configManager.getPlugin().getLogger().info("[NpcHandler] NPC 加载完成");
+        });
     }
 
     private void reloadMissingNpcs() {
         List<String> npcLocations = configManager.getNpcLocations();
-        if (npcLocations == null || npcLocations.isEmpty()) {
-            Bukkit.getLogger().info("[NpcHandler] No NPC locations found in config.");
-            return;
-        }
+        if (npcLocations == null || npcLocations.isEmpty()) return;
 
+        List<String> loadedInfo = new ArrayList<>();
         for (String locStr : npcLocations) {
             String[] parts = locStr.split(",");
-            if (parts.length != 7) {
-                Bukkit.getLogger().warning("[NpcHandler] Invalid NPC location format: " + locStr);
-                continue;
-            }
+            if (parts.length != 7) continue;
             Location loc = new Location(Bukkit.getWorld(parts[0]),
                     Double.parseDouble(parts[1]), Double.parseDouble(parts[2]), Double.parseDouble(parts[3]),
                     Float.parseFloat(parts[4]), Float.parseFloat(parts[5]));
             String customId = parts[6];
-            if (loc.getWorld() == null) {
-                Bukkit.getLogger().warning("[NpcHandler] World not found for NPC at: " + locStr);
-                continue;
-            }
+            if (loc.getWorld() == null) continue;
 
             if (!loc.getChunk().isLoaded()) {
                 loc.getChunk().load();
-                Bukkit.getLogger().info("[NpcHandler] Loaded chunk for NPC at " + loc.toString());
             }
 
-            clearNonNpcZombies(loc);
             Zombie existingNpc = findExistingNpcAt(loc, customId);
+            if (existingNpc != null && npcs.contains(existingNpc)) continue;
+
+            clearNonNpcZombies(loc);
             if (existingNpc != null) {
-                if (!npcs.contains(existingNpc)) {
-                    configureNpc(existingNpc, loc, customId);
-                    npcs.add(existingNpc);
-                    if (customId != null && !customId.startsWith("auto_")) npcById.put(customId, existingNpc);
-                    Bukkit.getLogger().info("[NpcHandler] Re-added existing NPC at " + loc.toString() + " with ID: " + customId);
-                } else {
-                    Bukkit.getLogger().info("[NpcHandler] NPC already exists at " + loc.toString() + " with ID: " + customId);
-                }
+                configureNpc(existingNpc, loc, customId);
+                npcs.add(existingNpc);
+                if (customId != null && !customId.startsWith("auto_")) npcById.put(customId, existingNpc);
             } else {
                 spawnNpc(loc, customId);
-                Bukkit.getLogger().info("[NpcHandler] Spawned new NPC at " + loc.toString() + " with ID: " + customId);
             }
+            loadedInfo.add("Loaded NPC at " + loc.toString() + " with ID: " + customId);
         }
         cleanOldNpcs();
+        if (!loadedInfo.isEmpty()) {
+            Bukkit.getLogger().info("[NpcHandler] " + String.join("; ", loadedInfo));
+        }
     }
 
     private void clearNonNpcZombies(Location loc) {
@@ -255,7 +246,7 @@ public class NpcHandler implements Listener, CommandExecutor, TabCompleter {
             }
         }
         configManager.saveNpcLocations(npcLocations);
-        Bukkit.getLogger().info("[NpcHandler] Saved " + npcLocations.size() + " NPCs to config.");
+        //Bukkit.getLogger().info("[NpcHandler] Saved " + npcLocations.size() + " NPCs to config.");
     }
 
     @EventHandler

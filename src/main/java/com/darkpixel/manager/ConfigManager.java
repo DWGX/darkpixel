@@ -1,15 +1,18 @@
 package com.darkpixel.manager;
 
+import com.darkpixel.Global;
 import com.darkpixel.utils.FileUtil;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
+
 import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 
 public class ConfigManager {
     private final JavaPlugin plugin;
@@ -20,22 +23,30 @@ public class ConfigManager {
         this.plugin = plugin;
         String[] configNames = {"config.yml", "minigame.yml", "commands.yml", "chat_history.yml",
                 "darkac.yml", "freeze_data.yml", "player.yml", "world_data.yml"};
-        for (String configName : configNames) {
-            File file = new File(plugin.getDataFolder(), configName);
-            configFiles.put(configName, file);
-            configs.put(configName, FileUtil.loadOrCreate(file, plugin, configName));
-        }
+        Global.executor.submit(() -> {
+            for (String configName : configNames) {
+                File file = new File(plugin.getDataFolder(), configName);
+                configFiles.put(configName, file);
+                configs.put(configName, FileUtil.loadOrCreate(file, plugin, configName));
+            }
+            plugin.getLogger().info("[ConfigManager] 所有配置文件异步加载完成");
+        });
     }
 
-    public synchronized void reloadAllConfigsAsync() {
-        for (String configName : configFiles.keySet()) {
-            configs.put(configName, YamlConfiguration.loadConfiguration(configFiles.get(configName)));
-            plugin.getLogger().info("已重新加载配置文件: " + configName);
-        }
+
+
+    public CompletableFuture<Void> reloadAllConfigsAsync() {
+        return CompletableFuture.runAsync(() -> {
+            for (String configName : configFiles.keySet()) {
+                configs.put(configName, YamlConfiguration.loadConfiguration(configFiles.get(configName)));
+                plugin.getLogger().info("已重新加载配置文件: " + configName);
+            }
+        });
     }
 
     public YamlConfiguration getConfig(String configName) {
-        return configs.getOrDefault(configName, new YamlConfiguration());
+        YamlConfiguration config = configs.get(configName);
+        return config != null ? config : new YamlConfiguration(); // 防止未加载时返回 null
     }
 
     public YamlConfiguration getConfig() {
@@ -77,7 +88,7 @@ public class ConfigManager {
         return getConfig().getBoolean("sitting.player-permissions." + player.getUniqueId().toString(), true);
     }
 
-    public synchronized void toggleSittingPermission(Player player) {
+    public void toggleSittingPermission(Player player) {
         String path = "sitting.player-permissions." + player.getUniqueId().toString();
         boolean current = getConfig().getBoolean(path, true);
         getConfig().set(path, !current);
@@ -88,18 +99,18 @@ public class ConfigManager {
         return getConfig().getBoolean("sitting.player-permissions." + player.getUniqueId().toString(), true);
     }
 
-    public synchronized void saveWhitelist(Set<String> whitelist) {
+    public void saveWhitelist(Set<String> whitelist) {
         getConfig().set("ai_whitelist", new ArrayList<>(whitelist));
         saveConfig("config.yml");
     }
 
-    public synchronized void saveMessageLimits(Map<String, Integer> limits) {
+    public void saveMessageLimits(Map<String, Integer> limits) {
         getConfig().set("player_message_limits", null);
         limits.forEach((k, v) -> getConfig().set("player_message_limits." + k, v));
         saveConfig("config.yml");
     }
 
-    public synchronized void saveNpcLocations(List<String> locations) {
+    public void saveNpcLocations(List<String> locations) {
         getConfig().set("npc_locations", locations);
         saveConfig("config.yml");
     }
@@ -114,7 +125,7 @@ public class ConfigManager {
 
     public JavaPlugin getPlugin() { return plugin; }
 
-    public synchronized void saveConfig(String configName) {
+    public void saveConfig(String configName) {
         YamlConfiguration config = configs.get(configName);
         File file = configFiles.get(configName);
         FileUtil.saveAsync(config, file, plugin);

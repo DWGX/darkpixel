@@ -6,8 +6,10 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.potion.PotionEffect;
+import org.bukkit.Particle;
+
 import java.io.File;
-import java.io.IOException;
+import java.sql.*;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -15,28 +17,173 @@ public class PlayerData {
     private final Map<String, PlayerInfo> playerData = new HashMap<>();
     private final File file;
     private YamlConfiguration config;
-    private final Global context;
+    public final Global context;
 
     public PlayerData(Global context) {
         this.context = context;
         file = new File(context.getPlugin().getDataFolder(), "player.yml");
         config = FileUtil.loadOrCreate(file, context.getPlugin(), "player.yml");
-        //Use updated method
         loadData();
     }
 
+    private Connection getConnection() throws SQLException {
+        YamlConfiguration config = context.getConfigManager().getConfig();
+        String host = config.getString("mysql.host");
+        int port = config.getInt("mysql.port");
+        String database = config.getString("mysql.database");
+        String username = config.getString("mysql.username");
+        String password = config.getString("mysql.password");
+        if (host == null || database == null || username == null || password == null) {
+            throw new SQLException("MySQL 配置不完整，请检查 config.yml");
+        }
+        String url = String.format("jdbc:mysql://%s:%d/%s", host, port, database);
+        return DriverManager.getConnection(url, username, password);
+    }
+
     private void loadData() {
+        try (Connection conn = getConnection();
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery("SELECT * FROM players")) {
+            while (rs.next()) {
+                String name = rs.getString("name");
+                String uuid = rs.getString("uuid");
+                int loginCount = rs.getInt("loginCount");
+                int signInCount = rs.getInt("signInCount");
+                double x = rs.getDouble("x");
+                double y = rs.getDouble("y");
+                double z = rs.getDouble("z");
+                String world = rs.getString("world");
+                long lastSignIn = rs.getLong("lastSignIn");
+                boolean effectsEnabled = rs.getBoolean("effectsEnabled");
+                String particle = rs.getString("particle");
+                PlayerInfo info = new PlayerInfo(loginCount, new Location(context.getPlugin().getServer().getWorld(world), x, y, z));
+                info.signInCount = signInCount;
+                info.lastSignIn = lastSignIn;
+                info.effectsEnabled = effectsEnabled;
+                info.particle = particle != null ? Particle.valueOf(particle) : Particle.FIREWORK;
+
+                try (PreparedStatement ps = conn.prepareStatement("SELECT group_name FROM player_groups WHERE uuid = ?")) {
+                    ps.setString(1, uuid);
+                    ResultSet groupRs = ps.executeQuery();
+                    while (groupRs.next()) {
+                        info.groups.add(groupRs.getString("group_name"));
+                    }
+                }
+
+                playerData.put(name, info);
+            }
+        } catch (SQLException e) {
+            context.getPlugin().getLogger().severe("加载玩家数据失败: " + e.getMessage());
+            e.printStackTrace();
+            loadDataFromYaml();
+        }
+    }
+
+    private void loadDataFromYaml() {
         for (String key : config.getKeys(false)) {
             int loginCount = config.getInt(key + ".loginCount", 0);
+            int signInCount = config.getInt(key + ".signInCount", 0);
             double x = config.getDouble(key + ".x", 0);
             double y = config.getDouble(key + ".y", 0);
             double z = config.getDouble(key + ".z", 0);
             String world = config.getString(key + ".world", "world");
             List<String> cheatTriggers = config.getStringList(key + ".cheatTriggers");
+            long lastSignIn = config.getLong(key + ".lastSignIn", 0L);
+            boolean effectsEnabled = config.getBoolean(key + ".effectsEnabled", true);
+            String particle = config.getString(key + ".particle", "FIREWORK");
             PlayerInfo info = new PlayerInfo(loginCount, new Location(context.getPlugin().getServer().getWorld(world), x, y, z));
+            info.signInCount = signInCount;
             info.cheatTriggers = cheatTriggers.isEmpty() ? new ArrayList<>() : cheatTriggers;
+            info.lastSignIn = lastSignIn;
+            info.effectsEnabled = effectsEnabled;
+            info.particle = Particle.valueOf(particle);
             playerData.put(key, info);
         }
+    }
+
+    public void saveData() {
+        try (Connection conn = getConnection()) {
+            for (Map.Entry<String, PlayerInfo> entry : playerData.entrySet()) {
+                String name = entry.getKey();
+                PlayerInfo info = entry.getValue();
+                Player player = context.getPlugin().getServer().getPlayer(name);
+                String uuid = player != null ? player.getUniqueId().toString() :
+                        context.getPlugin().getServer().getOfflinePlayer(name).getUniqueId().toString();
+
+                try (PreparedStatement ps = conn.prepareStatement(
+                        "INSERT INTO players (uuid, name, loginCount, signInCount, x, y, z, world, lastSignIn, effectsEnabled, particle) " +
+                                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE " +
+                                "name = ?, loginCount = ?, signInCount = ?, x = ?, y = ?, z = ?, world = ?, lastSignIn = ?, effectsEnabled = ?, particle = ?")) {
+                    ps.setString(1, uuid);
+                    ps.setString(2, name);
+                    ps.setInt(3, info.loginCount);
+                    ps.setInt(4, info.signInCount);
+                    ps.setDouble(5, info.location.getX());
+                    ps.setDouble(6, info.location.getY());
+                    ps.setDouble(7, info.location.getZ());
+                    ps.setString(8, info.location.getWorld().getName());
+                    ps.setLong(9, info.lastSignIn);
+                    ps.setBoolean(10, info.effectsEnabled);
+                    ps.setString(11, info.particle.name());
+                    ps.setString(12, name);
+                    ps.setInt(13, info.loginCount);
+                    ps.setInt(14, info.signInCount);
+                    ps.setDouble(15, info.location.getX());
+                    ps.setDouble(16, info.location.getY());
+                    ps.setDouble(17, info.location.getZ());
+                    ps.setString(18, info.location.getWorld().getName());
+                    ps.setLong(19, info.lastSignIn);
+                    ps.setBoolean(20, info.effectsEnabled);
+                    ps.setString(21, info.particle.name());
+                    ps.executeUpdate();
+                }
+
+                try (PreparedStatement ps = conn.prepareStatement("DELETE FROM player_groups WHERE uuid = ?")) {
+                    ps.setString(1, uuid);
+                    ps.executeUpdate();
+                }
+                for (String group : info.groups) {
+                    try (PreparedStatement ps = conn.prepareStatement("INSERT INTO player_groups (uuid, player_name, group_name) VALUES (?, ?, ?)")) {
+                        ps.setString(1, uuid);
+                        ps.setString(2, name);
+                        ps.setString(3, group);
+                        ps.executeUpdate();
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            context.getPlugin().getLogger().severe("保存玩家数据失败: " + e.getMessage());
+            e.printStackTrace();
+            saveDataAsync();
+        }
+    }
+
+    private void saveDataAsync() {
+        for (Map.Entry<String, PlayerInfo> entry : playerData.entrySet()) {
+            String name = entry.getKey();
+            PlayerInfo info = entry.getValue();
+            config.set(name + ".loginCount", info.loginCount);
+            config.set(name + ".signInCount", info.signInCount);
+            config.set(name + ".x", info.location.getX());
+            config.set(name + ".y", info.location.getY());
+            config.set(name + ".z", info.location.getZ());
+            config.set(name + ".world", info.location.getWorld().getName());
+            config.set(name + ".cheatTriggers", info.cheatTriggers);
+            config.set(name + ".lastSignIn", info.lastSignIn);
+            config.set(name + ".effectsEnabled", info.effectsEnabled);
+            config.set(name + ".particle", info.particle.name());
+        }
+        FileUtil.saveAsync(config, file, context.getPlugin());
+    }
+
+    public int getSignInCount(Player player) {
+        return getPlayerInfo(player.getName()).signInCount;
+    }
+
+    public void setSignInCount(Player player, int count) {
+        PlayerInfo info = getPlayerInfo(player.getName());
+        info.signInCount = count;
+        saveData();
     }
 
     public void updatePlayer(Player player) {
@@ -49,44 +196,62 @@ public class PlayerData {
         info.inventoryContents = player.getInventory().getContents();
         info.effects = player.getActivePotionEffects();
         playerData.put(name, info);
-        saveDataAsync();
+        saveData();
     }
 
     public PlayerInfo getPlayerInfo(String name) {
         return playerData.getOrDefault(name, new PlayerInfo(0, null));
     }
 
-    private void saveDataAsync() {
-        for (Map.Entry<String, PlayerInfo> entry : playerData.entrySet()) {
-            String name = entry.getKey();
-            PlayerInfo info = entry.getValue();
-            config.set(name + ".loginCount", info.loginCount);
-            config.set(name + ".x", info.location.getX());
-            config.set(name + ".y", info.location.getY());
-            config.set(name + ".z", info.location.getZ());
-            config.set(name + ".world", info.location.getWorld().getName());
-            config.set(name + ".cheatTriggers", info.cheatTriggers);
-        }
-        FileUtil.saveAsync(config, file, context.getPlugin());
+    public boolean isEffectsEnabled(Player player) {
+        return getPlayerInfo(player.getName()).effectsEnabled;
+    }
+
+    public void setParticle(Player player, Particle particle) {
+        PlayerInfo info = getPlayerInfo(player.getName());
+        info.particle = particle;
+        saveData();
+    }
+
+    public Particle getParticle(Player player) {
+        return getPlayerInfo(player.getName()).particle;
     }
 
     public static class PlayerInfo {
         public int loginCount;
+        public int signInCount;
         public Location location;
         public double health;
         public int foodLevel;
         public ItemStack[] inventoryContents;
         public Collection<PotionEffect> effects;
         public List<String> cheatTriggers;
+        public long lastSignIn;
+        public List<String> groups;
+        public boolean effectsEnabled;
+        public Particle particle;
+        private String name;
+        private UUID uuid;
+        public PlayerInfo(String name, UUID uuid) {
+            this.name = name;
+            this.uuid = uuid;
+        }
+        public String getName() { return name; }
+        public UUID getUuid() { return uuid; }
 
         public PlayerInfo(int loginCount, Location location) {
             this.loginCount = loginCount;
+            this.signInCount = 0;
             this.location = location;
             this.health = 20.0;
             this.foodLevel = 20;
             this.inventoryContents = new ItemStack[36];
             this.effects = new ArrayList<>();
             this.cheatTriggers = new ArrayList<>();
+            this.lastSignIn = 0L;
+            this.groups = new ArrayList<>();
+            this.effectsEnabled = true;
+            this.particle = Particle.FIREWORK;
         }
 
         public String getInventoryDescription() {
@@ -120,5 +285,15 @@ public class PlayerData {
         PlayerInfo info = getPlayerInfo(player.getName());
         return "玩家状态: " + info.health + "生命, " + info.foodLevel + "饥饿值 | 背包: " + info.getInventoryDescription() +
                 " | 效果: " + info.getEffectsDescription() + " | Cheat Triggers:\n" + info.getCheatTriggersDescription();
+    }
+
+    public void setLastSignIn(Player player, long time) {
+        PlayerInfo info = getPlayerInfo(player.getName());
+        info.lastSignIn = time;
+        saveData();
+    }
+
+    public long getLastSignIn(Player player) {
+        return getPlayerInfo(player.getName()).lastSignIn;
     }
 }
