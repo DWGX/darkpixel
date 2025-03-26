@@ -88,7 +88,7 @@ public class SignInContainer implements Listener {
         int newSignInCount = signInCount + 1;
         setSignInCount(player, newSignInCount);
         int newScore = rankData.getScore() + 10;
-        rankManager.setRank(player, rankData.getRank(), newScore); // 使用修复后的方法
+        rankManager.setRank(player, rankData.getRank(), newScore, rankManager.getJoinParticle(player), rankManager.getJoinMessage(player));
         player.sendMessage("§a签到成功！签到次数: " + newSignInCount + "，分数 +10，新分数: " + newScore);
         player.closeInventory();
     }

@@ -22,11 +22,12 @@ public class ChatListener implements Listener {
     public void onChat(AsyncPlayerChatEvent event) {
         Player player = event.getPlayer();
         PlayerData.PlayerInfo info = playerData.getPlayerInfo(player.getName());
-        List<String> groups = info.groups;
+        List<String> groups = rankManager.getPlayerGroups(player);
         String prefix = groups.stream()
                 .map(group -> rankManager.getGroups().getOrDefault(group, new RankGroup(group, "§f", "", "", "[" + group + "]")).getPrefix())
                 .collect(Collectors.joining(" "));
-        String format = prefix + " " + player.getName() + "§r: " + event.getMessage();
+        String rank = rankManager.getRank(player);
+        String format = prefix + " §e[" + rank + "] " + player.getName() + "§r: " + event.getMessage();
         event.setFormat(format);
     }
 }

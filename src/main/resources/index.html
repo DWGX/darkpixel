@@ -12,102 +12,119 @@
         }
         h1 {
             color: #2c3e50;
+            text-align: center;
         }
         .container {
-            max-width: 800px;
+            max-width: 1200px;
             margin: 0 auto;
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
         }
-        .section {
+        .server-status {
+            text-align: center;
             margin-bottom: 20px;
         }
-        label {
+        .server-status span {
             font-weight: bold;
-            margin-right: 10px;
+            padding: 5px 10px;
+            border-radius: 4px;
         }
-        input, select {
+        .server-status .online {
+            background-color: #2ecc71;
+            color: white;
+        }
+        .server-status .offline {
+            background-color: #e74c3c;
+            color: white;
+        }
+        .player-list, .group-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .player-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            width: 300px;
+        }
+        .player-card.online {
+            border: 2px solid #2ecc71;
+        }
+        .player-card.offline {
+            border: 2px solid #e74c3c;
+        }
+        .player-card h3 {
+            margin: 0 0 10px 0;
+            color: #2c3e50;
+        }
+        .player-card p {
+            margin: 5px 0;
+        }
+        .player-card select, .player-card input {
+            width: 100%;
             padding: 5px;
-            margin-right: 10px;
+            margin: 5px 0;
             border: 1px solid #ddd;
             border-radius: 4px;
         }
-        button {
-            padding: 8px 15px;
+        .player-card button {
+            padding: 6px 12px;
             background-color: #3498db;
             color: white;
             border: none;
             border-radius: 4px;
             cursor: pointer;
+            margin-right: 5px;
         }
-        button:hover {
+        .player-card button:hover {
             background-color: #2980b9;
         }
-        #onlinePlayers, #response {
+        .group-section {
+            margin-top: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        .group-section input {
+            padding: 5px;
+            margin-right: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        #response {
             margin-top: 20px;
             padding: 10px;
             background: #ecf0f1;
             border-radius: 4px;
-        }
-        ul {
-            list-style: none;
-            padding: 0;
-        }
-        li {
-            padding: 5px 0;
+            white-space: pre-wrap;
         }
     </style>
 </head>
 <body>
 <div class="container">
     <h1>黑像素服务器管理面板</h1>
-
-    <div class="section">
-        <h2>玩家管理</h2>
-        <label>玩家名:</label>
-        <input type="text" id="playerName">
-        <button onclick="getPlayerData()">获取数据</button>
-        <button onclick="setParticle()">设置粒子</button>
-        <button onclick="setEffects()">切换特效</button>
-        <button onclick="setGroup()">设置身份组</button>
+    <div class="server-status">
+        服务器状态: <span id="serverStatus" class="offline">未知</span>
     </div>
-
-    <div class="section">
-        <label>粒子效果:</label>
-        <select id="particle">
-            <option value="FIREWORK">烟花</option>
-            <option value="FLAME">火焰</option>
-            <option value="HEART">爱心</option>
-            <option value="VILLAGER_HAPPY">村民开心</option>
-            <option value="DRAGON_BREATH">龙息</option>
-            <option value="ENCHANTMENT_TABLE">附魔台</option>
-        </select>
+    <div class="player-list" id="playerList"></div>
+    <div class="group-section">
+        <h2>身份组管理</h2>
+        <div id="groupList"></div>
+        <h3>创建新身份组</h3>
+        <input type="text" id="groupName" placeholder="组名">
+        <input type="text" id="groupColor" placeholder="颜色 (如 §f)">
+        <input type="text" id="groupEmoji" placeholder="表情">
+        <input type="text" id="groupBadge" placeholder="徽章">
+        <input type="text" id="groupPrefix" placeholder="前缀 (如 [组名])">
+        <button onclick="createGroup()">创建</button>
     </div>
-
-    <div class="section">
-        <label>身份组:</label>
-        <input type="text" id="group" placeholder="例如: default, op">
-    </div>
-
-    <div class="section">
-        <label>进服特效:</label>
-        <input type="checkbox" id="effectsEnabled">
-    </div>
-
-    <div class="section">
-        <button onclick="listOnlinePlayers()">刷新在线玩家</button>
-        <div id="onlinePlayers"></div>
-    </div>
-
-    <div class="section">
-        <pre id="response"></pre>
-    </div>
+    <pre id="response"></pre>
 </div>
 
 <script>
     const apiBaseUrl = 'http://localhost:25567/api';
+    const particles = ['FIREWORK', 'FLAME', 'HEART', 'VILLAGER_HAPPY', 'DRAGON_BREATH', 'ENCHANTMENT_TABLE'];
 
     function sendRequest(endpoint, params, callback) {
         const url = `${apiBaseUrl}/${endpoint}?${new URLSearchParams(params).toString()}`;
@@ -120,64 +137,118 @@
             .catch(error => {
                 console.error('请求失败:', error);
                 document.getElementById('response').textContent = `错误: ${error.message}`;
+                if (endpoint === 'list_players') {
+                    document.getElementById('serverStatus').textContent = '离线';
+                    document.getElementById('serverStatus').className = 'offline';
+                }
             });
     }
 
-    function getPlayerData() {
-        const playerName = document.getElementById('playerName').value.trim();
-        if (!playerName) {
-            alert('请输入玩家名！');
-            return;
-        }
-        sendRequest('get_player_data', { player: playerName }, (data) => {
+    function checkServerStatus() {
+        sendRequest('list_players', {}, (data) => {
             if (data.status === 'success') {
-                document.getElementById('effectsEnabled').checked = data.data.effectsEnabled;
+                document.getElementById('serverStatus').textContent = '在线';
+                document.getElementById('serverStatus').className = 'online';
             }
         });
     }
 
-    function setParticle() {
-        const playerName = document.getElementById('playerName').value.trim();
-        const particle = document.getElementById('particle').value;
-        if (!playerName) {
-            alert('请输入玩家名！');
-            return;
-        }
-        sendRequest('set_particle', { player: playerName, particle: particle });
-    }
-
-    function setGroup() {
-        const playerName = document.getElementById('playerName').value.trim();
-        const group = document.getElementById('group').value.trim();
-        if (!playerName || !group) {
-            alert('请输入玩家名和身份组！');
-            return;
-        }
-        sendRequest('set_group', { player: playerName, group: group });
-    }
-
-    function setEffects() {
-        const playerName = document.getElementById('playerName').value.trim();
-        const enabled = document.getElementById('effectsEnabled').checked;
-        if (!playerName) {
-            alert('请输入玩家名！');
-            return;
-        }
-        sendRequest('set_effects', { player: playerName, enabled: enabled });
-    }
-
-    function listOnlinePlayers() {
-        sendRequest('online_players', {}, (data) => {
+    function loadPlayers() {
+        sendRequest('list_players', {}, (data) => {
             if (data.status === 'success') {
-                const players = data.players || [];
-                document.getElementById('onlinePlayers').innerHTML = '<h2>在线玩家</h2><ul>' +
-                    players.map(player => `<li>${player}</li>`).join('') + '</ul>';
+                const playerList = document.getElementById('playerList');
+                playerList.innerHTML = '';
+                data.players.forEach(player => {
+                    const card = document.createElement('div');
+                    card.className = `player-card ${player.online ? 'online' : 'offline'}`;
+                    card.innerHTML = `
+                        <h3>${player.name} (${player.online ? '在线' : '离线'})</h3>
+                        <p>UUID: ${player.uuid}</p>
+                        <p>Rank: <input type="text" value="${player.rank}" id="rank-${player.uuid}"></p>
+                        <p>Score: <input type="number" value="${player.score}" id="score-${player.uuid}"></p>
+                        <p>进服粒子: <select id="particle-${player.uuid}">
+                            ${particles.map(p => `<option value="${p}" ${p === player.join_particle ? 'selected' : ''}>${p}</option>`).join('')}
+                        </select></p>
+                        <p>进服消息: <input type="text" value="${player.join_message}" id="message-${player.uuid}"></p>
+                        <p>身份组: <input type="text" value="${player.groups.join(', ')}" id="groups-${player.uuid}"></p>
+                        <button onclick="updateRank('${player.uuid}')">更新 Rank</button>
+                        <button onclick="updateParticle('${player.uuid}')">更新粒子</button>
+                        <button onclick="updateMessage('${player.uuid}')">更新消息</button>
+                        <button onclick="updateGroups('${player.uuid}')">更新身份组</button>
+                    `;
+                    playerList.appendChild(card);
+                });
             }
         });
     }
 
-    // 页面加载时自动刷新在线玩家
-    window.onload = listOnlinePlayers;
+    function loadGroups() {
+        sendRequest('list_groups', {}, (data) => {
+            if (data.status === 'success') {
+                const groupList = document.getElementById('groupList');
+                groupList.innerHTML = '<h3>现有身份组</h3>' + data.groups.map(g => `<p>${g}</p>`).join('');
+            }
+        });
+    }
+
+    function updateRank(uuid) {
+        const rank = document.getElementById(`rank-${uuid}`).value;
+        const score = document.getElementById(`score-${uuid}`).value;
+        sendRequest('set_rank', { player: getPlayerName(uuid), rank, score }, loadPlayers);
+    }
+
+    function updateParticle(uuid) {
+        const particle = document.getElementById(`particle-${uuid}`).value;
+        sendRequest('set_particle', { player: getPlayerName(uuid), particle }, loadPlayers);
+    }
+
+    function updateMessage(uuid) {
+        const message = document.getElementById(`message-${uuid}`).value;
+        sendRequest('set_join_message', { player: getPlayerName(uuid), message }, loadPlayers);
+    }
+
+    function updateGroups(uuid) {
+        const groups = document.getElementById(`groups-${uuid}`).value.split(',').map(g => g.trim());
+        groups.forEach(group => sendRequest('set_group', { player: getPlayerName(uuid), group }, loadPlayers));
+    }
+
+    function createGroup() {
+        const name = document.getElementById('groupName').value.trim();
+        const color = document.getElementById('groupColor').value.trim();
+        const emoji = document.getElementById('groupEmoji').value.trim();
+        const badge = document.getElementById('groupBadge').value.trim();
+        const prefix = document.getElementById('groupPrefix').value.trim();
+        if (name) {
+            sendRequest('create_group', { name, color, emoji, badge, prefix }, () => {
+                loadGroups();
+                document.getElementById('groupName').value = '';
+                document.getElementById('groupColor').value = '';
+                document.getElementById('groupEmoji').value = '';
+                document.getElementById('groupBadge').value = '';
+                document.getElementById('groupPrefix').value = '';
+            });
+        }
+    }
+
+    function getPlayerName(uuid) {
+        const players = document.querySelectorAll('.player-card');
+        for (let card of players) {
+            if (card.querySelector('p').textContent.includes(uuid)) {
+                return card.querySelector('h3').textContent.split(' ')[0];
+            }
+        }
+        return '';
+    }
+
+    window.onload = () => {
+        checkServerStatus();
+        loadPlayers();
+        loadGroups();
+        setInterval(() => {
+            checkServerStatus();
+            loadPlayers();
+        }, 30000);
+    };
 </script>
 </body>
 </html>

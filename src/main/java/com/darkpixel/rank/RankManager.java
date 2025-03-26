@@ -2,6 +2,7 @@ package com.darkpixel.rank;
 
 import com.darkpixel.Global;
 import org.bukkit.Bukkit;
+import org.bukkit.Particle;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 
@@ -25,7 +26,7 @@ public class RankManager {
         });
     }
 
-    private Connection getConnection() throws SQLException {
+    public Connection getConnection() throws SQLException {
         YamlConfiguration config = context.getConfigManager().getConfig();
         String url = "jdbc:mysql://" + config.getString("mysql.host") + ":" + config.getInt("mysql.port") + "/" + config.getString("mysql.database") + "?autoReconnect=true";
         return DriverManager.getConnection(url, config.getString("mysql.username"), config.getString("mysql.password"));
@@ -68,12 +69,17 @@ public class RankManager {
     private void loadAllRanks() {
         try (Connection conn = getConnection();
              Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery("SELECT uuid, `rank`, score FROM players")) {
+             ResultSet rs = stmt.executeQuery("SELECT uuid, `rank`, score, join_particle, join_message FROM players")) {
             while (rs.next()) {
                 UUID uuid = UUID.fromString(rs.getString("uuid"));
                 String rank = rs.getString("rank");
                 int score = rs.getInt("score");
-                allRanks.put(uuid, new RankData(rank, score));
+                String particle = rs.getString("join_particle");
+                String message = rs.getString("join_message");
+                RankData data = new RankData(rank, score);
+                data.setJoinParticle(particle != null ? Particle.valueOf(particle) : Particle.FIREWORK);
+                data.setJoinMessage(message != null ? message : "欢迎 {player} 加入服务器！");
+                allRanks.put(uuid, data);
             }
         } catch (SQLException e) {
             context.getPlugin().getLogger().severe("加载玩家 Rank 数据失败: " + e.getMessage());
@@ -81,53 +87,28 @@ public class RankManager {
         }
     }
 
-    public void refreshPlayerData(Player player) {
+    public void setRank(Player player, String rank, int score, Particle particle, String joinMessage) {
         UUID uuid = player.getUniqueId();
-        Global.executor.submit(() -> {
-            try (Connection conn = getConnection()) {
-                try (PreparedStatement ps = conn.prepareStatement("SELECT group_name FROM player_groups WHERE uuid = ?")) {
-                    ps.setString(1, uuid.toString());
-                    ResultSet rs = ps.executeQuery();
-                    List<String> groups = new ArrayList<>();
-                    while (rs.next()) {
-                        groups.add(rs.getString("group_name"));
-                    }
-                    playerGroups.put(uuid, groups);
-                }
-                try (PreparedStatement ps = conn.prepareStatement("SELECT `rank`, score FROM players WHERE uuid = ?")) {
-                    ps.setString(1, uuid.toString());
-                    ResultSet rs = ps.executeQuery();
-                    if (rs.next()) {
-                        allRanks.put(uuid, new RankData(rs.getString("rank"), rs.getInt("score")));
-                    }
-                }
-            } catch (SQLException e) {
-                context.getPlugin().getLogger().severe("刷新玩家数据失败: " + e.getMessage());
-                e.printStackTrace();
-            }
-            Bukkit.getScheduler().runTask(context.getPlugin(), () -> {});
-        });
+        RankData data = new RankData(rank, score);
+        data.setJoinParticle(particle);
+        data.setJoinMessage(joinMessage);
+        allRanks.put(uuid, data);
+        Global.executor.submit(() -> saveRankToDatabase(uuid, rank, score, particle, joinMessage));
     }
 
-    public Map<UUID, RankData> getAllRanks() {
-        return allRanks;
-    }
-
-    public void setRank(Player player, String rank, int score) {
-        UUID uuid = player.getUniqueId();
-        allRanks.put(uuid, new RankData(rank, score));
-        Global.executor.submit(() -> saveRankToDatabase(uuid, rank, score));
-    }
-
-    private void saveRankToDatabase(UUID uuid, String rank, int score) {
+    private void saveRankToDatabase(UUID uuid, String rank, int score, Particle particle, String joinMessage) {
         try (Connection conn = getConnection();
              PreparedStatement ps = conn.prepareStatement(
-                     "INSERT INTO players (uuid, `rank`, score) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE `rank` = ?, score = ?")) {
+                     "INSERT INTO players (uuid, `rank`, score, join_particle, join_message) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE `rank` = ?, score = ?, join_particle = ?, join_message = ?")) {
             ps.setString(1, uuid.toString());
             ps.setString(2, rank);
             ps.setInt(3, score);
-            ps.setString(4, rank);
-            ps.setInt(5, score);
+            ps.setString(4, particle.name());
+            ps.setString(5, joinMessage);
+            ps.setString(6, rank);
+            ps.setInt(7, score);
+            ps.setString(8, particle.name());
+            ps.setString(9, joinMessage);
             ps.executeUpdate();
         } catch (SQLException e) {
             context.getPlugin().getLogger().severe("保存 Rank 数据失败: " + e.getMessage());
@@ -178,6 +159,16 @@ public class RankManager {
         return rankData != null ? rankData.getScore() : 0;
     }
 
+    public Particle getJoinParticle(Player player) {
+        RankData rankData = allRanks.getOrDefault(player.getUniqueId(), null);
+        return rankData != null ? rankData.getJoinParticle() : Particle.FIREWORK;
+    }
+
+    public String getJoinMessage(Player player) {
+        RankData rankData = allRanks.getOrDefault(player.getUniqueId(), null);
+        return rankData != null ? rankData.getJoinMessage().replace("{player}", player.getName()) : "欢迎 " + player.getName() + " 加入服务器！";
+    }
+
     public void saveAll() {
         context.getPlayerData().saveData();
     }
@@ -191,17 +182,20 @@ public class RankManager {
         loadAllRanks();
     }
 
-    public boolean isEffectsEnabled(Player player) {
-        return context.getPlayerData().isEffectsEnabled(player);
+    public Map<UUID, RankData> getAllRanks() {
+        return Collections.unmodifiableMap(allRanks);
     }
 
-    public void setRankByUUID(UUID uuid, String rank, int score) {
+    public void setRankByUUID(UUID uuid, String rank, int score, Particle particle, String joinMessage) {
         Player player = context.getPlugin().getServer().getPlayer(uuid);
         if (player != null) {
-            setRank(player, rank, score);
+            setRank(player, rank, score, particle, joinMessage);
         } else {
-            allRanks.put(uuid, new RankData(rank, score));
-            Global.executor.submit(() -> saveRankToDatabase(uuid, rank, score));
+            RankData data = new RankData(rank, score);
+            data.setJoinParticle(particle);
+            data.setJoinMessage(joinMessage);
+            allRanks.put(uuid, data);
+            Global.executor.submit(() -> saveRankToDatabase(uuid, rank, score, particle, joinMessage));
         }
     }
 

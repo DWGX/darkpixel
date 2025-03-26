@@ -17,8 +17,9 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.util.*;
-import java.util.stream.Collectors;
 
 public class RankServer implements Runnable {
     private final RankManager rankManager;
@@ -34,6 +35,7 @@ public class RankServer implements Runnable {
         this.port = playerData.context.getConfigManager().getConfig().getInt("http_port", 25567);
         this.gson = new GsonBuilder()
                 .registerTypeAdapter(PlayerData.PlayerInfo.class, new PlayerInfoTypeAdapter())
+                .registerTypeAdapter(RankData.class, new RankDataTypeAdapter())
                 .create();
     }
 
@@ -44,15 +46,13 @@ public class RankServer implements Runnable {
             server.createContext("/api", new ApiHandler());
             server.setExecutor(null);
             server.start();
-            Bukkit.getLogger().info("HTTP 服务器启动在端口 " + port);
+            Bukkit.getLogger().info("HTTP服务器跑在端口 " + port);
             while (running && !Thread.currentThread().isInterrupted()) {
                 Thread.sleep(1000);
             }
-        } catch (IOException e) {
-            Bukkit.getLogger().severe("启动 HTTP 服务器失败: " + e.getMessage());
+        } catch (IOException | InterruptedException e) {
+            Bukkit.getLogger().severe("HTTP服务器启动失败: " + e.getMessage());
             e.printStackTrace();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
         } finally {
             stopServer();
         }
@@ -61,7 +61,7 @@ public class RankServer implements Runnable {
     private void stopServer() {
         if (server != null) {
             server.stop(0);
-            Bukkit.getLogger().info("HTTP 服务器已关闭");
+            Bukkit.getLogger().info("HTTP服务器已关闭");
         }
     }
 
@@ -85,16 +85,30 @@ public class RankServer implements Runnable {
             try {
                 if ("/api/get_player_data".equals(path) && query != null) {
                     String playerName = getQueryParam(query, "player");
-                    rankManager.refreshPlayerData(Bukkit.getPlayer(playerName));
+                    Player player = Bukkit.getPlayer(playerName);
                     PlayerData.PlayerInfo info = playerData.getPlayerInfo(playerName);
+                    RankData rankData = rankManager.getAllRanks().getOrDefault(player != null ? player.getUniqueId() : Bukkit.getOfflinePlayer(playerName).getUniqueId(), new RankData("default", 0));
                     response.put("status", "success");
-                    response.put("data", gson.toJson(info));
+                    response.put("player_info", gson.toJson(info));
+                    response.put("rank_data", gson.toJson(rankData));
+                    response.put("online", player != null && player.isOnline());
                 } else if ("/api/set_particle".equals(path) && query != null) {
                     String playerName = getQueryParam(query, "player");
                     String particle = getQueryParam(query, "particle");
                     Player player = Bukkit.getPlayer(playerName);
                     if (player != null) {
-                        playerData.setParticle(player, Particle.valueOf(particle));
+                        rankManager.setRank(player, rankManager.getRank(player), rankManager.getScore(player), Particle.valueOf(particle), rankManager.getJoinMessage(player));
+                        response.put("status", "success");
+                    } else {
+                        response.put("status", "error");
+                        response.put("message", "玩家不在线");
+                    }
+                } else if ("/api/set_join_message".equals(path) && query != null) {
+                    String playerName = getQueryParam(query, "player");
+                    String message = getQueryParam(query, "message");
+                    Player player = Bukkit.getPlayer(playerName);
+                    if (player != null) {
+                        rankManager.setRank(player, rankManager.getRank(player), rankManager.getScore(player), rankManager.getJoinParticle(player), message);
                         response.put("status", "success");
                     } else {
                         response.put("status", "error");
@@ -111,32 +125,69 @@ public class RankServer implements Runnable {
                         response.put("status", "error");
                         response.put("message", "玩家不在线");
                     }
-                } else if ("/api/set_effects".equals(path) && query != null) {
+                } else if ("/api/set_rank".equals(path) && query != null) {
                     String playerName = getQueryParam(query, "player");
-                    String enabled = getQueryParam(query, "enabled");
-                    PlayerData.PlayerInfo playerInfo = playerData.getPlayerInfo(playerName);
-                    playerInfo.effectsEnabled = Boolean.parseBoolean(enabled);
-                    playerData.saveData();
+                    String rank = getQueryParam(query, "rank");
+                    int score = Integer.parseInt(getQueryParam(query, "score"));
+                    Player player = Bukkit.getPlayer(playerName);
+                    UUID uuid = player != null ? player.getUniqueId() : Bukkit.getOfflinePlayer(playerName).getUniqueId();
+                    rankManager.setRankByUUID(uuid, rank, score, rankManager.getJoinParticle(player), rankManager.getJoinMessage(player));
                     response.put("status", "success");
-                } else if ("/api/online_players".equals(path)) {
+                } else if ("/api/list_players".equals(path)) {
                     response.put("status", "success");
-                    response.put("players", Bukkit.getOnlinePlayers().stream()
-                            .map(Player::getName)
-                            .collect(Collectors.toList()));
+                    List<Map<String, Object>> players = new ArrayList<>();
+                    for (UUID uuid : rankManager.getAllRanks().keySet()) {
+                        String name = Bukkit.getOfflinePlayer(uuid).getName();
+                        RankData rankData = rankManager.getAllRanks().get(uuid);
+                        Player player = Bukkit.getPlayer(uuid);
+                        Map<String, Object> playerData = new HashMap<>();
+                        playerData.put("name", name);
+                        playerData.put("uuid", uuid.toString());
+                        playerData.put("rank", rankData.getRank());
+                        playerData.put("score", rankData.getScore());
+                        playerData.put("join_particle", rankData.getJoinParticle().name());
+                        playerData.put("join_message", rankData.getJoinMessage());
+                        playerData.put("groups", rankManager.getPlayerGroups(player));
+                        playerData.put("online", player != null && player.isOnline());
+                        players.add(playerData);
+                    }
+                    response.put("players", players);
+                } else if ("/api/list_groups".equals(path)) {
+                    response.put("status", "success");
+                    response.put("groups", rankManager.getGroups().keySet());
+                } else if ("/api/create_group".equals(path) && query != null) {
+                    String name = getQueryParam(query, "name");
+                    String color = getQueryParam(query, "color");
+                    String emoji = getQueryParam(query, "emoji");
+                    String badge = getQueryParam(query, "badge");
+                    String prefix = getQueryParam(query, "prefix");
+                    rankManager.getGroups().put(name, new RankGroup(name, color, emoji, badge, prefix));
+                    try (Connection conn = rankManager.getConnection();
+                         PreparedStatement ps = conn.prepareStatement("INSERT INTO `groups` (name, color, emoji, badge, prefix) VALUES (?, ?, ?, ?, ?)")) {
+                        ps.setString(1, name);
+                        ps.setString(2, color);
+                        ps.setString(3, emoji);
+                        ps.setString(4, badge);
+                        ps.setString(5, prefix);
+                        ps.executeUpdate();
+                    }
+                    response.put("status", "success");
                 } else {
                     response.put("status", "error");
-                    response.put("message", "未知命令或参数缺失");
+                    response.put("message", "啥命令啊？参数也不对");
                 }
             } catch (Exception e) {
                 response.put("status", "error");
-                response.put("message", "处理请求失败: " + e.getMessage());
+                response.put("message", "出错了: " + e.getMessage());
             }
 
             responseBody = gson.toJson(response);
+            byte[] responseBytes = responseBody.getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().set("Content-Type", "application/json");
-            exchange.sendResponseHeaders(200, responseBody.length());
+            exchange.sendResponseHeaders(200, responseBytes.length);
             try (OutputStream os = exchange.getResponseBody()) {
-                os.write(responseBody.getBytes(StandardCharsets.UTF_8));
+                os.write(responseBytes);
+                os.flush();
             }
         }
 
@@ -163,7 +214,6 @@ public class RankServer implements Runnable {
                 out.value(group);
             }
             out.endArray();
-            out.name("effectsEnabled").value(value.effectsEnabled);
             out.endObject();
         }
 
@@ -173,7 +223,6 @@ public class RankServer implements Runnable {
             String name = null;
             UUID uuid = null;
             List<String> groups = new ArrayList<>();
-            boolean effectsEnabled = true;
             while (in.hasNext()) {
                 String field = in.nextName();
                 if ("name".equals(field)) {
@@ -186,8 +235,6 @@ public class RankServer implements Runnable {
                         groups.add(in.nextString());
                     }
                     in.endArray();
-                } else if ("effectsEnabled".equals(field)) {
-                    effectsEnabled = in.nextBoolean();
                 } else {
                     in.skipValue();
                 }
@@ -195,8 +242,47 @@ public class RankServer implements Runnable {
             in.endObject();
             PlayerData.PlayerInfo info = new PlayerData.PlayerInfo(name, uuid);
             info.groups = groups;
-            info.effectsEnabled = effectsEnabled;
             return info;
+        }
+    }
+
+    static class RankDataTypeAdapter extends TypeAdapter<RankData> {
+        @Override
+        public void write(JsonWriter out, RankData value) throws IOException {
+            out.beginObject();
+            out.name("rank").value(value.getRank());
+            out.name("score").value(value.getScore());
+            out.name("join_particle").value(value.getJoinParticle().name());
+            out.name("join_message").value(value.getJoinMessage());
+            out.endObject();
+        }
+
+        @Override
+        public RankData read(JsonReader in) throws IOException {
+            in.beginObject();
+            String rank = "default";
+            int score = 0;
+            Particle particle = Particle.FIREWORK;
+            String joinMessage = "欢迎 {player} 加入服务器！";
+            while (in.hasNext()) {
+                String field = in.nextName();
+                if ("rank".equals(field)) {
+                    rank = in.nextString();
+                } else if ("score".equals(field)) {
+                    score = in.nextInt();
+                } else if ("join_particle".equals(field)) {
+                    particle = Particle.valueOf(in.nextString());
+                } else if ("join_message".equals(field)) {
+                    joinMessage = in.nextString();
+                } else {
+                    in.skipValue();
+                }
+            }
+            in.endObject();
+            RankData data = new RankData(rank, score);
+            data.setJoinParticle(particle);
+            data.setJoinMessage(joinMessage);
+            return data;
         }
     }
 }

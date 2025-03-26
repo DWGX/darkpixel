@@ -3,10 +3,13 @@ package com.darkpixel.utils;
 import com.darkpixel.Global;
 import com.darkpixel.ai.AiChatHandler;
 import com.darkpixel.manager.ConfigManager;
-import com.darkpixel.rank.ChatListener;
 import com.darkpixel.rank.RankManager;
 import org.bukkit.Bukkit;
+import org.bukkit.Particle;
+import org.bukkit.Sound;
+import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -34,8 +37,6 @@ public class LoginMessageUtil implements Listener {
         this.rankManager = context.getRankManager();
         this.configManager = context.getConfigManager();
         context.getPlugin().getCommand("toggleaiwelcome").setExecutor(new ToggleAiWelcomeCommand(this.context));
-        context.getPlugin().getServer().getPluginManager().registerEvents(new ChatListener(playerData, rankManager), context.getPlugin());
-        context.getPlugin().getServer().getPluginManager().registerEvents(new com.darkpixel.utils.effects.PlayerJoinEffects(playerData), context.getPlugin());
     }
 
     @EventHandler
@@ -50,25 +51,25 @@ public class LoginMessageUtil implements Listener {
         String playerName = player.getName();
         String rank = rankManager.getRank(player);
         int score = rankManager.getScore(player);
+        Particle particle = rankManager.getJoinParticle(player);
+        String joinMessage = rankManager.getJoinMessage(player);
         Global.executor.submit(() -> playerData.updatePlayer(player));
         int loginCount = playerData.getPlayerInfo(playerName).loginCount;
         event.setJoinMessage("§7Lobby §8| §a" + playerName + " (" + rank + ") 欢迎第 " + loginCount + " 次加入黑像素服务器");
-        context.getPlugin().getServer().broadcastMessage("§6✨§c尊贵的" + rank + " §e" + playerName + "§c 降临服务器！§6✨ §b(｡>∀<｡) 大佬驾到，全体起立！");
+        context.getPlugin().getServer().broadcastMessage(joinMessage);
+        player.getWorld().spawnParticle(particle, player.getLocation(), 100);
+        player.getWorld().playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.0f);
 
         new BukkitRunnable() {
             @Override
             public void run() {
                 if (!player.isOnline()) return;
-
-                // 检查 OP 身份组并赋予权限
                 List<String> groups = rankManager.getPlayerGroups(player);
                 boolean shouldBeOp = groups.contains("op") || Bukkit.getOperators().stream().anyMatch(op -> op.getUniqueId().equals(player.getUniqueId()));
                 if (shouldBeOp && !player.isOp()) {
                     Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "op " + playerName);
                     player.sendMessage("§a已授予你 OP 权限！");
                 }
-
-                // 设置 OldCombatMechanics 模式（避免冲突）
                 boolean wasOp = player.isOp();
                 if (!wasOp) Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "op " + playerName);
                 player.performCommand("oldcombatmechanics mode old");
@@ -92,7 +93,7 @@ public class LoginMessageUtil implements Listener {
                 public void run() {
                     Global.executor.submit(() -> aiChat.sendMessage(player, "玩家 " + playerName + "（Rank: " + rank + "，分数: " + score + "）第 " + loginCount + " 次加入服务器，坐标: " +
                             player.getLocation().getBlockX() + "," + player.getLocation().getBlockY() + "," + player.getLocation().getBlockZ() + "，请用中文生成一个自然、友好的欢迎消息", false, response ->
-                            player.sendMessage("§b欢迎回来，" + playerName + "（" + rank + "）！第" + loginCount + "次光临，分数 " + score + "，快去冒险吧~^^")));
+                            player.sendMessage("§b" + response)));
                 }
             }.runTaskLater(configManager.getPlugin(), 20L);
             lastAiWelcome.put(player.getUniqueId(), System.currentTimeMillis());
@@ -107,7 +108,7 @@ public class LoginMessageUtil implements Listener {
         }
 
         @Override
-        public boolean onCommand(org.bukkit.command.CommandSender sender, org.bukkit.command.Command cmd, String label, String[] args) {
+        public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
             if (!sender.hasPermission("darkpixel.admin")) {
                 sender.sendMessage("§c需要管理员权限！");
                 return true;
