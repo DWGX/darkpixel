@@ -9,14 +9,23 @@ import com.darkpixel.gui.DashboardHandler;
 import com.darkpixel.gui.ServerSwitchChest;
 import com.darkpixel.gui.ServerRadioChest;
 import com.darkpixel.gui.SignInContainer;
+import com.darkpixel.manager.BanManager;
 import com.darkpixel.manager.CommandManager;
 import com.darkpixel.manager.ConfigManager;
 import com.darkpixel.npc.LobbyZombie;
 import com.darkpixel.npc.NpcHandler;
 import com.darkpixel.npc.RadioChestZombie;
 import com.darkpixel.npc.SwitchChestZombie;
-import com.darkpixel.rank.*;
-import com.darkpixel.utils.*;
+import com.darkpixel.rank.ChatListener;
+import com.darkpixel.rank.RankCommands;
+import com.darkpixel.rank.RankManager;
+import com.darkpixel.rank.RankServer;
+import com.darkpixel.utils.LoginMessageUtil;
+import com.darkpixel.utils.MotdUtils;
+import com.darkpixel.utils.PlayerData;
+import com.darkpixel.utils.PlayerFreeze;
+import com.darkpixel.utils.SitUtils;
+import com.darkpixel.utils.WorldData;
 import com.darkpixel.utils.effects.PlayerJoinEffects;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -49,7 +58,8 @@ public class Global {
     private final RadioChestZombie radioChestZombie;
     private final LobbyZombie lobbyZombie;
     private final SignInContainer signInContainer;
-    private final RankServer rankServer; // 新增 RankServer 实例
+    private final RankServer rankServer;
+    private final BanManager banManager;
 
     public static final ExecutorService executor = new ThreadPoolExecutor(
             Runtime.getRuntime().availableProcessors(),
@@ -82,12 +92,12 @@ public class Global {
         this.sitUtils = configManager.getConfig().getBoolean("sitting.enabled", true) ? new SitUtils(this) : null;
         this.antiCheatHandler = new AntiCheatHandler(this);
         this.signInContainer = new SignInContainer(this, rankManager);
-        this.rankServer = new RankServer(rankManager, playerData); // 初始化 RankServer
+        this.rankServer = new RankServer(rankManager, playerData, this);
+        this.banManager = new BanManager(this);
 
         new CommandManager(this);
         plugin.getServer().getPluginManager().registerEvents(new ChatListener(playerData, rankManager), plugin);
         plugin.getServer().getPluginManager().registerEvents(new PlayerJoinEffects(playerData), plugin);
-        plugin.getCommand("toggleeffects").setExecutor(new ToggleEffectsCommand(playerData));
         plugin.getCommand("rank").setExecutor(new RankCommands(rankManager));
         if (bringBackBlocking != null && configManager.getConfig().getBoolean("enable_bring_back_blocking", true)) {
             plugin.getServer().getPluginManager().registerEvents(bringBackBlocking, plugin);
@@ -108,36 +118,96 @@ public class Global {
         Global.executor.submit(() -> configManager.reloadAllConfigsAsync());
     }
 
-    public void updateSitUtils() {
-        boolean enabled = configManager.getConfig().getBoolean("sitting.enabled", true);
-        if (enabled && sitUtils == null) {
-            sitUtils = new SitUtils(this);
-            plugin.getServer().getPluginManager().registerEvents(sitUtils, plugin);
-        } else if (!enabled && sitUtils != null) {
-            sitUtils = null;
-        }
+    public JavaPlugin getPlugin() {
+        return plugin;
     }
 
-    // Getter 方法
-    public JavaPlugin getPlugin() { return plugin; }
-    public ConfigManager getConfigManager() { return configManager; }
-    public YamlConfiguration getConfig() { return configManager.getConfig(); }
-    public YamlConfiguration getMinigameConfig() { return minigameConfig; }
-    public YamlConfiguration getCommandConfig() { return commandConfig; }
-    public AiChatHandler getAiChat() { return aiChat; }
-    public BringBackBlocking getBringBackBlocking() { return bringBackBlocking; }
-    public DashboardHandler getDashboard() { return dashboard; }
-    public NpcHandler getNpcHandler() { return npcHandler; }
-    public LoginMessageUtil getLoginMessageUtil() { return loginMessageUtil; }
-    public PlayerData getPlayerData() { return playerData; }
-    public WorldData getWorldData() { return worldData; }
-    public PlayerFreeze getPlayerFreeze() { return playerFreeze; }
-    public MotdUtils getMotdUtils() { return motdUtils; }
-    public SitUtils getSitUtils() { return sitUtils; }
-    public AntiCheatHandler getAntiCheatHandler() { return antiCheatHandler; }
-    public ServerSwitchChest getServerSwitchChest() { return serverSwitchChest; }
-    public ServerRadioChest getServerRadioChest() { return serverRadioChest; }
-    public RankManager getRankManager() { return rankManager; }
-    public SignInContainer getSignInContainer() { return signInContainer; }
-    public RankServer getRankServer() { return rankServer; } // 新增 RankServer getter
+    public ConfigManager getConfigManager() {
+        return configManager;
+    }
+
+    public PlayerData getPlayerData() {
+        return playerData;
+    }
+
+    public WorldData getWorldData() {
+        return worldData;
+    }
+
+    public RankManager getRankManager() {
+        return rankManager;
+    }
+
+    public AiChatHandler getAiChat() {
+        return aiChat;
+    }
+
+    public DashboardHandler getDashboard() {
+        return dashboard;
+    }
+
+    public NpcHandler getNpcHandler() {
+        return npcHandler;
+    }
+
+    public BringBackBlocking getBringBackBlocking() {
+        return bringBackBlocking;
+    }
+
+    public LoginMessageUtil getLoginMessageUtil() {
+        return loginMessageUtil;
+    }
+
+    public PlayerFreeze getPlayerFreeze() {
+        return playerFreeze;
+    }
+
+    public MotdUtils getMotdUtils() {
+        return motdUtils;
+    }
+
+    public SitUtils getSitUtils() {
+        return sitUtils;
+    }
+
+    public YamlConfiguration getMinigameConfig() {
+        return minigameConfig;
+    }
+
+    public YamlConfiguration getCommandConfig() {
+        return commandConfig;
+    }
+
+    public AntiCheatHandler getAntiCheatHandler() {
+        return antiCheatHandler;
+    }
+
+    public ServerSwitchChest getServerSwitchChest() {
+        return serverSwitchChest;
+    }
+
+    public ServerRadioChest getServerRadioChest() {
+        return serverRadioChest;
+    }
+
+    public SignInContainer getSignInContainer() {
+        return signInContainer;
+    }
+
+    public RankServer getRankServer() {
+        return rankServer;
+    }
+
+    public BanManager getBanManager() {
+        return banManager;
+    }
+
+    public YamlConfiguration getConfig() {
+        return configManager.getConfig();
+    }
+
+    public void updateSitUtils() {
+        this.sitUtils = configManager.getConfig().getBoolean("sitting.enabled", true) ? new SitUtils(this) : null;
+        if (sitUtils != null) plugin.getServer().getPluginManager().registerEvents(sitUtils, plugin);
+    }
 }

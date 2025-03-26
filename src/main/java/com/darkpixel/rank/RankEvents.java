@@ -2,6 +2,7 @@ package com.darkpixel.rank;
 
 import com.darkpixel.Global;
 import com.darkpixel.utils.PlayerData;
+import org.bukkit.Bukkit;
 import org.bukkit.Particle;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -22,6 +23,7 @@ public class RankEvents implements Listener {
         Player player = event.getPlayer();
         if (!rankManager.getAllRanks().containsKey(player.getUniqueId())) {
             rankManager.setRank(player, "member", 0, Particle.FIREWORK, "欢迎 {player} 加入服务器！");
+            rankManager.setGroup(player, "member");
         }
         Global.executor.submit(() -> playerData.updatePlayer(player));
     }

@@ -4,251 +4,264 @@
     <meta charset="UTF-8">
     <title>黑像素服务器管理面板</title>
     <style>
-        body {
-            font-family: 'Segoe UI', Arial, sans-serif;
-            margin: 20px;
-            background-color: #f0f0f0;
-            color: #333;
-        }
-        h1 {
-            color: #2c3e50;
-            text-align: center;
-        }
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-        .server-status {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        .server-status span {
-            font-weight: bold;
-            padding: 5px 10px;
-            border-radius: 4px;
-        }
-        .server-status .online {
-            background-color: #2ecc71;
-            color: white;
-        }
-        .server-status .offline {
-            background-color: #e74c3c;
-            color: white;
-        }
-        .player-list, .group-list {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 20px;
-        }
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f4; }
+        .server-status { font-size: 18px; margin-bottom: 20px; color: #333; }
         .player-card {
-            background: white;
-            padding: 15px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin: 5px;
             width: 300px;
+            display: inline-block;
+            vertical-align: top;
+            background-color: #fff;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
         }
-        .player-card.online {
-            border: 2px solid #2ecc71;
-        }
-        .player-card.offline {
-            border: 2px solid #e74c3c;
-        }
-        .player-card h3 {
-            margin: 0 0 10px 0;
-            color: #2c3e50;
-        }
-        .player-card p {
-            margin: 5px 0;
-        }
-        .player-card select, .player-card input {
-            width: 100%;
-            padding: 5px;
-            margin: 5px 0;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-        }
-        .player-card button {
-            padding: 6px 12px;
-            background-color: #3498db;
+        details { margin: 10px 0; }
+        summary { cursor: pointer; font-weight: bold; color: #007bff; }
+        .group-list { max-height: 100px; overflow-y: auto; border: 1px solid #ddd; padding: 5px; }
+        button {
+            margin: 5px;
+            padding: 5px 10px;
+            background-color: #007bff;
             color: white;
             border: none;
-            border-radius: 4px;
+            border-radius: 3px;
             cursor: pointer;
-            margin-right: 5px;
         }
-        .player-card button:hover {
-            background-color: #2980b9;
-        }
-        .group-section {
-            margin-top: 20px;
-            background: white;
-            padding: 15px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-        }
-        .group-section input {
-            padding: 5px;
-            margin-right: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-        }
-        #response {
-            margin-top: 20px;
-            padding: 10px;
-            background: #ecf0f1;
-            border-radius: 4px;
-            white-space: pre-wrap;
-        }
+        button:hover { background-color: #0056b3; }
+        input, select { margin: 5px; padding: 5px; border: 1px solid #ddd; border-radius: 3px; }
+        label { font-weight: bold; }
+        .op-group { color: #ff4500; font-weight: bold; }
     </style>
 </head>
 <body>
-<div class="container">
-    <h1>黑像素服务器管理面板</h1>
-    <div class="server-status">
-        服务器状态: <span id="serverStatus" class="offline">未知</span>
-    </div>
-    <div class="player-list" id="playerList"></div>
-    <div class="group-section">
-        <h2>身份组管理</h2>
-        <div id="groupList"></div>
-        <h3>创建新身份组</h3>
-        <input type="text" id="groupName" placeholder="组名">
-        <input type="text" id="groupColor" placeholder="颜色 (如 §f)">
-        <input type="text" id="groupEmoji" placeholder="表情">
-        <input type="text" id="groupBadge" placeholder="徽章">
-        <input type="text" id="groupPrefix" placeholder="前缀 (如 [组名])">
+<div class="server-status">服务器状态: <span id="status">加载中...</span></div>
+<div id="player-list"></div>
+<details>
+    <summary>身份组管理</summary>
+    <div id="group-list" class="group-list"></div>
+    <div>
+        <input id="group-name" placeholder="组名">
+        <input id="group-color" placeholder="颜色 (如 §f)">
+        <input id="group-emoji" placeholder="表情">
+        <input id="group-badge" placeholder="徽章">
+        <input id="group-prefix" placeholder="前缀 (如 [组名])">
         <button onclick="createGroup()">创建</button>
     </div>
-    <pre id="response"></pre>
-</div>
+</details>
 
 <script>
-    const apiBaseUrl = 'http://localhost:25567/api';
-    const particles = ['FIREWORK', 'FLAME', 'HEART', 'VILLAGER_HAPPY', 'DRAGON_BREATH', 'ENCHANTMENT_TABLE'];
+    const apiBase = "http://localhost:25567/api";
+    const particles = ["FIREWORK", "FLAME", "HEART", "NOTE", "SMOKE", "VILLAGER_HAPPY"];
+    const chatColors = ["normal", "red", "blue", "green", "yellow", "purple"];
+    let availableGroups = [];
 
-    function sendRequest(endpoint, params, callback) {
-        const url = `${apiBaseUrl}/${endpoint}?${new URLSearchParams(params).toString()}`;
-        fetch(url, { method: 'GET' })
-            .then(response => response.json())
+    function fetchPlayers() {
+        fetch(`${apiBase}/list_players`)
+            .then(res => res.json())
             .then(data => {
-                document.getElementById('response').textContent = JSON.stringify(data, null, 2);
-                if (callback) callback(data);
-            })
-            .catch(error => {
-                console.error('请求失败:', error);
-                document.getElementById('response').textContent = `错误: ${error.message}`;
-                if (endpoint === 'list_players') {
-                    document.getElementById('serverStatus').textContent = '离线';
-                    document.getElementById('serverStatus').className = 'offline';
+                if (data.status === "success") {
+                    document.getElementById("status").textContent = "在线";
+                    const playerList = document.getElementById("player-list");
+                    playerList.innerHTML = ""; // 清空旧卡片
+                    data.players.forEach(player => {
+                        const card = document.createElement("div");
+                        card.className = "player-card";
+                        card.id = `player-${player.uuid}`;
+                        const currentGroup = player.groups && player.groups.length > 0 ? player.groups[0] : "member";
+                        card.innerHTML = `
+                            <details open>
+                                <summary>${player.name} (${player.online ? "在线" : "离线"})</summary>
+                                <p>UUID: ${player.uuid}</p>
+                                <p>
+                                    <label>积分:</label>
+                                    <input type="number" value="${player.score}" id="score-${player.uuid}">
+                                    <button onclick="setScore('${player.uuid}', document.getElementById('score-${player.uuid}').value)">设置</button>
+                                </p>
+                                <p>
+                                    <label>Rank:</label>
+                                    <select id="rank-${player.uuid}" onchange="toggleCustomRank('${player.uuid}')">
+                                        <option value="VIP" ${player.rank === "VIP" ? "selected" : ""}>VIP</option>
+                                        <option value="SVIP" ${player.rank === "SVIP" ? "selected" : ""}>SVIP</option>
+                                        <option value="VVIP" ${player.rank === "VVIP" ? "selected" : ""}>VVIP</option>
+                                        <option value="UVIP" ${player.rank === "UVIP" ? "selected" : ""}>UVIP</option>
+                                        <option value="EVIP" ${player.rank === "EVIP" ? "selected" : ""}>EVIP</option>
+                                        <option value="custom" ${!["VIP", "SVIP", "VVIP", "UVIP", "EVIP"].includes(player.rank) ? "selected" : ""}>自定义</option>
+                                    </select>
+                                    <input id="custom-rank-${player.uuid}" placeholder="输入自定义 Rank" value="${!["VIP", "SVIP", "VVIP", "UVIP", "EVIP"].includes(player.rank) ? player.rank : ""}" style="display: ${!["VIP", "SVIP", "VVIP", "UVIP", "EVIP"].includes(player.rank) ? 'inline' : 'none'};">
+                                    <button onclick="setRank('${player.uuid}', document.getElementById('rank-${player.uuid}').value === 'custom' ? document.getElementById('custom-rank-${player.uuid}').value : document.getElementById('rank-${player.uuid}').value)">设置</button>
+                                </p>
+                                <p>
+                                    <label>身份组:</label>
+                                    <select id="group-${player.uuid}">
+                                        ${availableGroups.map(g => `<option value="${g}" ${currentGroup === g ? "selected" : ""}>${g}</option>`).join("")}
+                                    </select>
+                                    <button onclick="setGroup('${player.uuid}', document.getElementById('group-${player.uuid}').value)">设置</button>
+                                </p>
+                                <p>
+                                    <label>进服粒子:</label>
+                                    <select id="particle-${player.uuid}">
+                                        ${particles.map(p => `<option value="${p}" ${p === player.join_particle ? "selected" : ""}>${p}</option>`).join("")}
+                                    </select>
+                                    <button onclick="setParticle('${player.uuid}', document.getElementById('particle-${player.uuid}').value)">设置</button>
+                                </p>
+                                <p>
+                                    <label>进服消息:</label>
+                                    <input id="join-message-${player.uuid}" value="${player.join_message}">
+                                    <button onclick="setJoinMessage('${player.uuid}', document.getElementById('join-message-${player.uuid}').value)">设置</button>
+                                </p>
+                                <p>
+                                    <label>发言颜色:</label>
+                                    <select id="chat-color-${player.uuid}">
+                                        ${chatColors.map(c => `<option value="${c}" ${c === player.chat_color ? "selected" : ""}>${c}</option>`).join("")}
+                                    </select>
+                                    <button onclick="setChatColor('${player.uuid}', document.getElementById('chat-color-${player.uuid}').value)">设置</button>
+                                </p>
+                                <p>
+                                    <label>显示选项:</label>
+                                    <input type="checkbox" id="show-rank-${player.uuid}" ${player.show_rank ? "checked" : ""}> Rank
+                                    <input type="checkbox" id="show-vip-${player.uuid}" ${player.show_vip ? "checked" : ""}> VIP
+                                    <input type="checkbox" id="show-group-${player.uuid}" ${player.show_group ? "checked" : ""}> 身份组
+                                    <button onclick="setDisplayOptions('${player.uuid}')">设置</button>
+                                </p>
+                                <p>封禁状态: ${player.ban_until === 0 ? "未封禁" : "已封禁"}</p>
+                                <p>封禁原因: ${player.ban_reason || "无"}</p>
+                                <button onclick="banPlayer('${player.uuid}')">封禁</button>
+                                <button onclick="unbanPlayer('${player.uuid}')">解封</button>
+                            </details>
+                        `;
+                        playerList.appendChild(card);
+                    });
+                } else {
+                    document.getElementById("status").textContent = "离线";
                 }
+            })
+            .catch(err => {
+                document.getElementById("status").textContent = "离线";
+                console.error("请求失败:", err);
             });
     }
 
-    function checkServerStatus() {
-        sendRequest('list_players', {}, (data) => {
-            if (data.status === 'success') {
-                document.getElementById('serverStatus').textContent = '在线';
-                document.getElementById('serverStatus').className = 'online';
-            }
-        });
+    function fetchGroups() {
+        fetch(`${apiBase}/list_groups`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === "success") {
+                    availableGroups = data.groups.map(g => g.name);
+                    const groupList = document.getElementById("group-list");
+                    groupList.innerHTML = "";
+                    data.groups.forEach(group => {
+                        const div = document.createElement("div");
+                        const colorStyle = group.name === "op" ? "op-group" : "";
+                        div.innerHTML = `<span class="${colorStyle}">[${group.prefix || group.name}] ${group.name}</span>
+                            <button onclick="deleteGroup('${group.name}')">删除</button>`;
+                        groupList.appendChild(div);
+                    });
+                }
+            })
+            .catch(err => console.error("请求失败:", err));
     }
 
-    function loadPlayers() {
-        sendRequest('list_players', {}, (data) => {
-            if (data.status === 'success') {
-                const playerList = document.getElementById('playerList');
-                playerList.innerHTML = '';
-                data.players.forEach(player => {
-                    const card = document.createElement('div');
-                    card.className = `player-card ${player.online ? 'online' : 'offline'}`;
-                    card.innerHTML = `
-                        <h3>${player.name} (${player.online ? '在线' : '离线'})</h3>
-                        <p>UUID: ${player.uuid}</p>
-                        <p>Rank: <input type="text" value="${player.rank}" id="rank-${player.uuid}"></p>
-                        <p>Score: <input type="number" value="${player.score}" id="score-${player.uuid}"></p>
-                        <p>进服粒子: <select id="particle-${player.uuid}">
-                            ${particles.map(p => `<option value="${p}" ${p === player.join_particle ? 'selected' : ''}>${p}</option>`).join('')}
-                        </select></p>
-                        <p>进服消息: <input type="text" value="${player.join_message}" id="message-${player.uuid}"></p>
-                        <p>身份组: <input type="text" value="${player.groups.join(', ')}" id="groups-${player.uuid}"></p>
-                        <button onclick="updateRank('${player.uuid}')">更新 Rank</button>
-                        <button onclick="updateParticle('${player.uuid}')">更新粒子</button>
-                        <button onclick="updateMessage('${player.uuid}')">更新消息</button>
-                        <button onclick="updateGroups('${player.uuid}')">更新身份组</button>
-                    `;
-                    playerList.appendChild(card);
-                });
-            }
-        });
+    function toggleCustomRank(uuid) {
+        const select = document.getElementById(`rank-${uuid}`);
+        const customInput = document.getElementById(`custom-rank-${uuid}`);
+        customInput.style.display = select.value === "custom" ? "inline" : "none";
     }
 
-    function loadGroups() {
-        sendRequest('list_groups', {}, (data) => {
-            if (data.status === 'success') {
-                const groupList = document.getElementById('groupList');
-                groupList.innerHTML = '<h3>现有身份组</h3>' + data.groups.map(g => `<p>${g}</p>`).join('');
-            }
-        });
+    function setScore(uuid, score) {
+        fetch(`${apiBase}/set_score?player=${uuid}&score=${score}`)
+            .then(() => fetchPlayers())
+            .catch(err => console.error("设置积分失败:", err));
     }
 
-    function updateRank(uuid) {
-        const rank = document.getElementById(`rank-${uuid}`).value;
-        const score = document.getElementById(`score-${uuid}`).value;
-        sendRequest('set_rank', { player: getPlayerName(uuid), rank, score }, loadPlayers);
+    function setRank(uuid, rank) {
+        if (rank) {
+            fetch(`${apiBase}/set_rank?player=${uuid}&rank=${rank}`)
+                .then(() => fetchPlayers())
+                .catch(err => console.error("设置 Rank 失败:", err));
+        }
     }
 
-    function updateParticle(uuid) {
-        const particle = document.getElementById(`particle-${uuid}`).value;
-        sendRequest('set_particle', { player: getPlayerName(uuid), particle }, loadPlayers);
+    function setGroup(uuid, group) {
+        if (group) {
+            fetch(`${apiBase}/set_group?player=${uuid}&group=${group}`)
+                .then(() => fetchPlayers())
+                .catch(err => console.error("设置身份组失败:", err));
+        }
     }
 
-    function updateMessage(uuid) {
-        const message = document.getElementById(`message-${uuid}`).value;
-        sendRequest('set_join_message', { player: getPlayerName(uuid), message }, loadPlayers);
+    function setParticle(uuid, particle) {
+        fetch(`${apiBase}/set_particle?player=${uuid}&particle=${particle}`)
+            .then(() => fetchPlayers())
+            .catch(err => console.error("设置粒子失败:", err));
     }
 
-    function updateGroups(uuid) {
-        const groups = document.getElementById(`groups-${uuid}`).value.split(',').map(g => g.trim());
-        groups.forEach(group => sendRequest('set_group', { player: getPlayerName(uuid), group }, loadPlayers));
+    function setJoinMessage(uuid, message) {
+        fetch(`${apiBase}/set_join_message?player=${uuid}&message=${message}`)
+            .then(() => fetchPlayers())
+            .catch(err => console.error("设置进服消息失败:", err));
+    }
+
+    function setChatColor(uuid, chatColor) {
+        fetch(`${apiBase}/set_chat_color?player=${uuid}&chat_color=${chatColor}`)
+            .then(() => fetchPlayers())
+            .catch(err => console.error("设置发言颜色失败:", err));
+    }
+
+    function setDisplayOptions(uuid) {
+        const showRank = document.getElementById(`show-rank-${uuid}`).checked;
+        const showVip = document.getElementById(`show-vip-${uuid}`).checked;
+        const showGroup = document.getElementById(`show-group-${uuid}`).checked;
+        fetch(`${apiBase}/set_display_options?player=${uuid}&show_rank=${showRank}&show_vip=${showVip}&show_group=${showGroup}`)
+            .then(() => fetchPlayers())
+            .catch(err => console.error("设置显示选项失败:", err));
+    }
+
+    function banPlayer(uuid) {
+        const time = prompt("封禁时间(分钟，-1为永久):");
+        const reason = prompt("封禁原因:");
+        fetch(`${apiBase}/ban?player=${uuid}&banTime=${time}&reason=${reason}`)
+            .then(() => fetchPlayers())
+            .catch(err => console.error("封禁失败:", err));
+    }
+
+    function unbanPlayer(uuid) {
+        fetch(`${apiBase}/unban?player=${uuid}`)
+            .then(() => fetchPlayers())
+            .catch(err => console.error("解封失败:", err));
     }
 
     function createGroup() {
-        const name = document.getElementById('groupName').value.trim();
-        const color = document.getElementById('groupColor').value.trim();
-        const emoji = document.getElementById('groupEmoji').value.trim();
-        const badge = document.getElementById('groupBadge').value.trim();
-        const prefix = document.getElementById('groupPrefix').value.trim();
-        if (name) {
-            sendRequest('create_group', { name, color, emoji, badge, prefix }, () => {
-                loadGroups();
-                document.getElementById('groupName').value = '';
-                document.getElementById('groupColor').value = '';
-                document.getElementById('groupEmoji').value = '';
-                document.getElementById('groupBadge').value = '';
-                document.getElementById('groupPrefix').value = '';
-            });
-        }
+        const name = document.getElementById("group-name").value;
+        const color = document.getElementById("group-color").value || "§f";
+        const emoji = document.getElementById("group-emoji").value;
+        const badge = document.getElementById("group-badge").value;
+        const prefix = document.getElementById("group-prefix").value;
+        fetch(`${apiBase}/create_group?name=${name}&color=${color}&emoji=${emoji}&badge=${badge}&prefix=${prefix}`)
+            .then(() => {
+                fetchGroups();
+                document.getElementById("group-name").value = "";
+                document.getElementById("group-color").value = "";
+                document.getElementById("group-emoji").value = "";
+                document.getElementById("group-badge").value = "";
+                document.getElementById("group-prefix").value = "";
+            })
+            .catch(err => console.error("创建身份组失败:", err));
     }
 
-    function getPlayerName(uuid) {
-        const players = document.querySelectorAll('.player-card');
-        for (let card of players) {
-            if (card.querySelector('p').textContent.includes(uuid)) {
-                return card.querySelector('h3').textContent.split(' ')[0];
-            }
-        }
-        return '';
+    function deleteGroup(name) {
+        fetch(`${apiBase}/delete_group?name=${name}`)
+            .then(() => fetchGroups())
+            .catch(err => console.error("删除身份组失败:", err));
     }
 
-    window.onload = () => {
-        checkServerStatus();
-        loadPlayers();
-        loadGroups();
-        setInterval(() => {
-            checkServerStatus();
-            loadPlayers();
-        }, 30000);
-    };
+    setInterval(() => {
+        fetchPlayers();
+        fetchGroups();
+    }, 5000);
+    fetchPlayers();
+    fetchGroups();
 </script>
 </body>
 </html>

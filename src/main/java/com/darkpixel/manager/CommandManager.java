@@ -15,33 +15,86 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.util.Arrays;
+
 public class CommandManager implements CommandExecutor {
     private final Global context;
     private final GiveBlockableSword giveBlockableSword;
+    private final BanManager banManager;
 
     public CommandManager(Global context) {
         this.context = context;
         this.giveBlockableSword = new GiveBlockableSword();
+        this.banManager = new BanManager(context);
         JavaPlugin plugin = context.getPlugin();
-        plugin.getCommand("aichat").setExecutor(new AiChatCommands(context.getAiChat(), context.getDashboard()));
-        plugin.getCommand("giveblockablesword").setExecutor(this);
-        plugin.getCommand("dashboard").setExecutor(context.getDashboard());
-        plugin.getCommand("hub").setExecutor(context.getDashboard());
-        plugin.getCommand("geiwoqian").setExecutor(this);
-        plugin.getCommand("npc").setExecutor(context.getNpcHandler());
-        plugin.getCommand("freeze").setExecutor(context.getPlayerFreeze());
-        plugin.getCommand("setchattimes").setExecutor(this);
-        plugin.getCommand("sit").setExecutor(this);
-        plugin.getCommand("togglesit").setExecutor(this);
-        plugin.getCommand("ping").setExecutor(this);
-        plugin.getCommand("getswitchchest").setExecutor(context.getServerSwitchChest());
-        plugin.getCommand("getradio").setExecutor(context.getServerRadioChest());
-        plugin.getCommand("rank").setExecutor(new RankCommands(context.getRankManager()));
+
+        // 注册所有命令并添加健壮性检查
+        registerCommand(plugin, "aichat", new AiChatCommands(context.getAiChat(), context.getDashboard()));
+        registerCommand(plugin, "giveblockablesword", this);
+        registerCommand(plugin, "dashboard", context.getDashboard());
+        registerCommand(plugin, "hub", context.getDashboard());
+        registerCommand(plugin, "geiwoqian", this);
+        registerCommand(plugin, "npc", context.getNpcHandler());
+        registerCommand(plugin, "freeze", context.getPlayerFreeze());
+        registerCommand(plugin, "setchattimes", this);
+        registerCommand(plugin, "sit", this);
+        registerCommand(plugin, "togglesit", this);
+        registerCommand(plugin, "ping", this);
+        registerCommand(plugin, "getswitchchest", context.getServerSwitchChest());
+        registerCommand(plugin, "getradio", context.getServerRadioChest());
+        registerCommand(plugin, "rank", new RankCommands(context.getRankManager()));
+        registerCommand(plugin, "darkban", this); // 修改为 darkban
+    }
+
+    private void registerCommand(JavaPlugin plugin, String commandName, CommandExecutor executor) {
+        if (plugin.getCommand(commandName) != null) {
+            plugin.getCommand(commandName).setExecutor(executor);
+            plugin.getLogger().info("成功注册命令: /" + commandName);
+        } else {
+            plugin.getLogger().severe("无法注册命令 '/" + commandName + "'，请检查 plugin.yml 是否正确配置！");
+        }
     }
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         switch (command.getName().toLowerCase()) {
+            case "darkban":
+                if (!sender.hasPermission("darkpixel.admin")) {
+                    sender.sendMessage("§c需要管理员权限！");
+                    return true;
+                }
+                if (args.length < 1) {
+                    sender.sendMessage("§c用法: /darkban ban <玩家> <时间(分钟，-1为永久)> [原因] 或 /darkban unban <玩家>");
+                    return true;
+                }
+                if (args[0].equalsIgnoreCase("ban")) {
+                    if (args.length < 3) {
+                        sender.sendMessage("§c用法: /darkban ban <玩家> <时间(分钟，-1为永久)> [原因]");
+                        return true;
+                    }
+                    String playerName = args[1];
+                    long banTime;
+                    try {
+                        banTime = Long.parseLong(args[2]);
+                    } catch (NumberFormatException e) {
+                        sender.sendMessage("§c时间必须是数字或-1！");
+                        return true;
+                    }
+                    String reason = args.length > 3 ? String.join(" ", Arrays.copyOfRange(args, 3, args.length)) : "未指定原因";
+                    long banUntil = banTime == -1 ? -1 : (banTime > 0 ? System.currentTimeMillis() + banTime * 60000 : 0);
+                    banManager.banPlayer(playerName, banUntil, reason);
+                    sender.sendMessage("§a已封禁 " + playerName + (banTime == -1 ? " 永久" : " " + banTime + " 分钟") + "，原因：" + reason);
+                } else if (args[0].equalsIgnoreCase("unban")) {
+                    if (args.length != 2) {
+                        sender.sendMessage("§c用法: /darkban unban <玩家>");
+                        return true;
+                    }
+                    banManager.unbanPlayer(args[1]);
+                    sender.sendMessage("§a已解禁 " + args[1]);
+                } else {
+                    sender.sendMessage("§c未知子命令！用法: /darkban ban 或 /darkban unban");
+                }
+                return true;
             case "giveblockablesword":
                 return giveBlockableSword.onCommand(sender, command, label, args);
             case "geiwoqian":
@@ -89,11 +142,11 @@ public class CommandManager implements CommandExecutor {
     }
 
     private boolean handleGeiWoQian(CommandSender sender) {
-        if (!(sender instanceof Player player)) {
+        if (!(sender instanceof Player)) {
             sender.sendMessage("§c仅玩家可用！");
             return true;
         }
-        player.sendMessage("§c别想了，服务器不发钱！");
+        sender.sendMessage("§c别想了，服务器不发钱！");
         return true;
     }
 

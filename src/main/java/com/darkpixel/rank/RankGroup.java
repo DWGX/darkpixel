@@ -15,6 +15,10 @@ public class RankGroup {
         this.prefix = prefix;
     }
 
+    public String getName() {
+        return name;
+    }
+
     public String getColor() {
         return color;
     }

@@ -15,16 +15,12 @@ public final class Main extends JavaPlugin {
     @Override
     public void onEnable() {
         try {
-            // 确保 LogUtil 在任何操作前初始化
             LogUtil.init(this);
             getLogger().info("正在初始化 LogUtil...");
-
-            // 初始化 Global
             context = new Global(this);
             getLogger().info("Global 初始化完成");
 
-            // 启动 RankServer 线程
-            rankServerThread = new Thread(context.getRankServer(), "RankServer-Thread");
+            rankServerThread = new Thread(new RankServer(context.getRankManager(), context.getPlayerData(), context), "RankServer-Thread");
             rankServerThread.start();
             getLogger().info("RankServer 线程已启动");
 
@@ -32,14 +28,13 @@ public final class Main extends JavaPlugin {
         } catch (Exception e) {
             getLogger().severe("DarkPixel 初始化失败: " + e.getMessage());
             e.printStackTrace();
-            setEnabled(false); // 初始化失败时禁用插件
+            setEnabled(false);
         }
     }
 
     @Override
     public void onDisable() {
         try {
-            // 保存 RankManager 数据
             if (context != null && context.getRankManager() != null) {
                 context.getRankManager().saveAll();
                 getLogger().info("RankManager 数据已保存");
@@ -47,12 +42,11 @@ public final class Main extends JavaPlugin {
                 getLogger().warning("RankManager 未初始化，跳过保存");
             }
 
-            // 关闭 RankServer 线程
             if (context != null && context.getRankServer() != null) {
                 context.getRankServer().shutdown();
                 if (rankServerThread != null && rankServerThread.isAlive()) {
                     rankServerThread.interrupt();
-                    rankServerThread.join(5000); // 等待最多 5 秒
+                    rankServerThread.join(5000);
                     if (rankServerThread.isAlive()) {
                         getLogger().warning("RankServer 线程未能及时关闭");
                     } else {
@@ -63,7 +57,6 @@ public final class Main extends JavaPlugin {
                 getLogger().warning("RankServer 未初始化，跳过关闭");
             }
 
-            // 关闭线程池
             if (!Global.executor.isShutdown()) {
                 Global.executor.shutdown();
                 try {

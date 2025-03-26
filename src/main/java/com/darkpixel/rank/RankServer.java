@@ -1,5 +1,6 @@
 package com.darkpixel.rank;
 
+import com.darkpixel.Global;
 import com.darkpixel.utils.PlayerData;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -7,7 +8,6 @@ import com.google.gson.TypeAdapter;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
 import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import org.bukkit.Bukkit;
 import org.bukkit.Particle;
@@ -19,39 +19,43 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
-import java.util.*;
+import java.sql.ResultSet;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 public class RankServer implements Runnable {
     private final RankManager rankManager;
     private final PlayerData playerData;
+    private final Global context;
     private final Gson gson;
     private final int port;
     private volatile boolean running = true;
     private HttpServer server;
 
-    public RankServer(RankManager rankManager, PlayerData playerData) {
+    public RankServer(RankManager rankManager, PlayerData playerData, Global context) {
         this.rankManager = rankManager;
         this.playerData = playerData;
-        this.port = playerData.context.getConfigManager().getConfig().getInt("http_port", 25567);
+        this.context = context;
+        this.port = context.getConfigManager().getConfig().getInt("http_port", 25567);
         this.gson = new GsonBuilder()
                 .registerTypeAdapter(PlayerData.PlayerInfo.class, new PlayerInfoTypeAdapter())
                 .registerTypeAdapter(RankData.class, new RankDataTypeAdapter())
                 .create();
     }
 
-    @Override
     public void run() {
         try {
             server = HttpServer.create(new InetSocketAddress(port), 0);
             server.createContext("/api", new ApiHandler());
             server.setExecutor(null);
             server.start();
-            Bukkit.getLogger().info("HTTP服务器跑在端口 " + port);
             while (running && !Thread.currentThread().isInterrupted()) {
                 Thread.sleep(1000);
             }
         } catch (IOException | InterruptedException e) {
-            Bukkit.getLogger().severe("HTTP服务器启动失败: " + e.getMessage());
             e.printStackTrace();
         } finally {
             stopServer();
@@ -61,7 +65,6 @@ public class RankServer implements Runnable {
     private void stopServer() {
         if (server != null) {
             server.stop(0);
-            Bukkit.getLogger().info("HTTP服务器已关闭");
         }
     }
 
@@ -70,8 +73,7 @@ public class RankServer implements Runnable {
         stopServer();
     }
 
-    class ApiHandler implements HttpHandler {
-        @Override
+    class ApiHandler implements com.sun.net.httpserver.HttpHandler {
         public void handle(HttpExchange exchange) throws IOException {
             String path = exchange.getRequestURI().getPath();
             String query = exchange.getRequestURI().getQuery();
@@ -83,63 +85,22 @@ public class RankServer implements Runnable {
             exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "Content-Type");
 
             try {
-                if ("/api/get_player_data".equals(path) && query != null) {
-                    String playerName = getQueryParam(query, "player");
-                    Player player = Bukkit.getPlayer(playerName);
-                    PlayerData.PlayerInfo info = playerData.getPlayerInfo(playerName);
-                    RankData rankData = rankManager.getAllRanks().getOrDefault(player != null ? player.getUniqueId() : Bukkit.getOfflinePlayer(playerName).getUniqueId(), new RankData("default", 0));
-                    response.put("status", "success");
-                    response.put("player_info", gson.toJson(info));
-                    response.put("rank_data", gson.toJson(rankData));
-                    response.put("online", player != null && player.isOnline());
-                } else if ("/api/set_particle".equals(path) && query != null) {
-                    String playerName = getQueryParam(query, "player");
-                    String particle = getQueryParam(query, "particle");
-                    Player player = Bukkit.getPlayer(playerName);
-                    if (player != null) {
-                        rankManager.setRank(player, rankManager.getRank(player), rankManager.getScore(player), Particle.valueOf(particle), rankManager.getJoinMessage(player));
-                        response.put("status", "success");
-                    } else {
-                        response.put("status", "error");
-                        response.put("message", "玩家不在线");
-                    }
-                } else if ("/api/set_join_message".equals(path) && query != null) {
-                    String playerName = getQueryParam(query, "player");
-                    String message = getQueryParam(query, "message");
-                    Player player = Bukkit.getPlayer(playerName);
-                    if (player != null) {
-                        rankManager.setRank(player, rankManager.getRank(player), rankManager.getScore(player), rankManager.getJoinParticle(player), message);
-                        response.put("status", "success");
-                    } else {
-                        response.put("status", "error");
-                        response.put("message", "玩家不在线");
-                    }
-                } else if ("/api/set_group".equals(path) && query != null) {
-                    String playerName = getQueryParam(query, "player");
-                    String group = getQueryParam(query, "group");
-                    Player player = Bukkit.getPlayer(playerName);
-                    if (player != null) {
-                        rankManager.setGroup(player, group);
-                        response.put("status", "success");
-                    } else {
-                        response.put("status", "error");
-                        response.put("message", "玩家不在线");
-                    }
-                } else if ("/api/set_rank".equals(path) && query != null) {
-                    String playerName = getQueryParam(query, "player");
-                    String rank = getQueryParam(query, "rank");
-                    int score = Integer.parseInt(getQueryParam(query, "score"));
-                    Player player = Bukkit.getPlayer(playerName);
-                    UUID uuid = player != null ? player.getUniqueId() : Bukkit.getOfflinePlayer(playerName).getUniqueId();
-                    rankManager.setRankByUUID(uuid, rank, score, rankManager.getJoinParticle(player), rankManager.getJoinMessage(player));
-                    response.put("status", "success");
-                } else if ("/api/list_players".equals(path)) {
+                if ("/api/list_players".equals(path)) {
                     response.put("status", "success");
                     List<Map<String, Object>> players = new ArrayList<>();
-                    for (UUID uuid : rankManager.getAllRanks().keySet()) {
+                    List<Map.Entry<UUID, RankData>> rankedList = new ArrayList<>(rankManager.getAllRanks().entrySet());
+                    rankedList.sort((a, b) -> Integer.compare(b.getValue().getScore(), a.getValue().getScore()));
+                    int page = query != null ? Integer.parseInt(getQueryParam(query, "page") != null ? getQueryParam(query, "page") : "1") : 1;
+                    int pageSize = query != null ? Integer.parseInt(getQueryParam(query, "pageSize") != null ? getQueryParam(query, "pageSize") : "10") : 10;
+                    int start = (page - 1) * pageSize;
+                    int end = Math.min(start + pageSize, rankedList.size());
+                    for (int i = start; i < end && i < rankedList.size(); i++) {
+                        UUID uuid = rankedList.get(i).getKey();
+                        RankData rankData = rankedList.get(i).getValue();
                         String name = Bukkit.getOfflinePlayer(uuid).getName();
-                        RankData rankData = rankManager.getAllRanks().get(uuid);
+                        if (name == null) continue;
                         Player player = Bukkit.getPlayer(uuid);
+                        PlayerData.PlayerInfo info = playerData.getPlayerInfo(name);
                         Map<String, Object> playerData = new HashMap<>();
                         playerData.put("name", name);
                         playerData.put("uuid", uuid.toString());
@@ -147,38 +108,179 @@ public class RankServer implements Runnable {
                         playerData.put("score", rankData.getScore());
                         playerData.put("join_particle", rankData.getJoinParticle().name());
                         playerData.put("join_message", rankData.getJoinMessage());
-                        playerData.put("groups", rankManager.getPlayerGroups(player));
+                        playerData.put("groups", rankManager.getPlayerGroups(player != null ? player : Bukkit.getOfflinePlayer(uuid).getPlayer()));
+                        playerData.put("chat_color", rankData.getChatColor());
+                        playerData.put("show_rank", rankData.isShowRank());
+                        playerData.put("show_vip", rankData.isShowVip());
+                        playerData.put("show_group", rankData.isShowGroup());
+                        playerData.put("ban_until", rankData.getBanUntil());
+                        playerData.put("ban_reason", rankData.getBanReason());
                         playerData.put("online", player != null && player.isOnline());
+                        playerData.put("login_count", info.loginCount);
+                        playerData.put("last_sign_in", info.lastSignIn);
                         players.add(playerData);
                     }
                     response.put("players", players);
+                    response.put("total", rankedList.size());
+                    response.put("page", page);
+                    response.put("pageSize", pageSize);
+                } else if ("/api/set_score".equals(path) && query != null) {
+                    String playerName = getQueryParam(query, "player");
+                    int score = Integer.parseInt(getQueryParam(query, "score"));
+                    Player player = Bukkit.getPlayer(playerName);
+                    UUID uuid = player != null ? player.getUniqueId() : UUID.fromString(playerName);
+                    rankManager.setScoreByUUID(uuid, score);
+                    response.put("status", "success");
+                } else if ("/api/set_rank".equals(path) && query != null) {
+                    String playerName = getQueryParam(query, "player");
+                    String rank = getQueryParam(query, "rank");
+                    Player player = Bukkit.getPlayer(playerName);
+                    UUID uuid = player != null ? player.getUniqueId() : UUID.fromString(playerName);
+                    RankData data = rankManager.getAllRanks().getOrDefault(uuid, new RankData("member", 0));
+                    rankManager.setRankByUUID(uuid, rank, data.getScore(), data.getJoinParticle(), data.getJoinMessage());
+                    response.put("status", "success");
+                } else if ("/api/set_group".equals(path) && query != null) {
+                    String playerName = getQueryParam(query, "player");
+                    String group = getQueryParam(query, "group");
+                    Player player = Bukkit.getPlayer(playerName);
+                    UUID uuid = player != null ? player.getUniqueId() : UUID.fromString(playerName);
+                    rankManager.setGroupByUUID(uuid, group);
+                    PlayerData.PlayerInfo info = playerData.getPlayerInfo(Bukkit.getOfflinePlayer(uuid).getName());
+                    info.groups.clear();
+                    info.groups.add(group);
+                    playerData.saveData();
+                    response.put("status", "success");
+                } else if ("/api/set_particle".equals(path) && query != null) {
+                    String playerName = getQueryParam(query, "player");
+                    String particle = getQueryParam(query, "particle");
+                    Player player = Bukkit.getPlayer(playerName);
+                    UUID uuid = player != null ? player.getUniqueId() : UUID.fromString(playerName);
+                    RankData data = rankManager.getAllRanks().getOrDefault(uuid, new RankData("member", 0));
+                    rankManager.setRankByUUID(uuid, data.getRank(), data.getScore(), Particle.valueOf(particle), data.getJoinMessage());
+                    response.put("status", "success");
+                } else if ("/api/set_join_message".equals(path) && query != null) {
+                    String playerName = getQueryParam(query, "player");
+                    String message = getQueryParam(query, "message");
+                    Player player = Bukkit.getPlayer(playerName);
+                    UUID uuid = player != null ? player.getUniqueId() : UUID.fromString(playerName);
+                    RankData data = rankManager.getAllRanks().getOrDefault(uuid, new RankData("member", 0));
+                    rankManager.setRankByUUID(uuid, data.getRank(), data.getScore(), data.getJoinParticle(), message);
+                    response.put("status", "success");
+                } else if ("/api/set_chat_color".equals(path) && query != null) {
+                    String playerName = getQueryParam(query, "player");
+                    String chatColor = getQueryParam(query, "chat_color");
+                    Player player = Bukkit.getPlayer(playerName);
+                    UUID uuid = player != null ? player.getUniqueId() : UUID.fromString(playerName);
+                    RankData data = rankManager.getAllRanks().getOrDefault(uuid, new RankData("member", 0));
+                    data.setChatColor(chatColor);
+                    rankManager.setRankByUUID(uuid, data.getRank(), data.getScore(), data.getJoinParticle(), data.getJoinMessage());
+                    response.put("status", "success");
+                } else if ("/api/set_display_options".equals(path) && query != null) {
+                    String playerName = getQueryParam(query, "player");
+                    boolean showRank = Boolean.parseBoolean(getQueryParam(query, "show_rank"));
+                    boolean showVip = Boolean.parseBoolean(getQueryParam(query, "show_vip"));
+                    boolean showGroup = Boolean.parseBoolean(getQueryParam(query, "show_group"));
+                    Player player = Bukkit.getPlayer(playerName);
+                    UUID uuid = player != null ? player.getUniqueId() : UUID.fromString(playerName);
+                    RankData data = rankManager.getAllRanks().getOrDefault(uuid, new RankData("member", 0));
+                    data.setShowRank(showRank);
+                    data.setShowVip(showVip);
+                    data.setShowGroup(showGroup);
+                    rankManager.setRankByUUID(uuid, data.getRank(), data.getScore(), data.getJoinParticle(), data.getJoinMessage());
+                    response.put("status", "success");
                 } else if ("/api/list_groups".equals(path)) {
                     response.put("status", "success");
-                    response.put("groups", rankManager.getGroups().keySet());
+                    List<Map<String, String>> groups = new ArrayList<>();
+                    try (Connection conn = rankManager.getConnection();
+                         PreparedStatement ps = conn.prepareStatement("SELECT * FROM `groups`");
+                         ResultSet rs = ps.executeQuery()) {
+                        while (rs.next()) {
+                            Map<String, String> group = new HashMap<>();
+                            group.put("name", rs.getString("name"));
+                            group.put("color", rs.getString("color"));
+                            group.put("emoji", rs.getString("emoji"));
+                            group.put("badge", rs.getString("badge"));
+                            group.put("prefix", rs.getString("prefix"));
+                            groups.add(group);
+                        }
+                    }
+                    response.put("groups", groups);
                 } else if ("/api/create_group".equals(path) && query != null) {
                     String name = getQueryParam(query, "name");
                     String color = getQueryParam(query, "color");
                     String emoji = getQueryParam(query, "emoji");
                     String badge = getQueryParam(query, "badge");
                     String prefix = getQueryParam(query, "prefix");
-                    rankManager.getGroups().put(name, new RankGroup(name, color, emoji, badge, prefix));
                     try (Connection conn = rankManager.getConnection();
-                         PreparedStatement ps = conn.prepareStatement("INSERT INTO `groups` (name, color, emoji, badge, prefix) VALUES (?, ?, ?, ?, ?)")) {
+                         PreparedStatement ps = conn.prepareStatement(
+                                 "INSERT INTO `groups` (name, color, emoji, badge, prefix) VALUES (?, ?, ?, ?, ?) " +
+                                         "ON DUPLICATE KEY UPDATE color = ?, emoji = ?, badge = ?, prefix = ?")) {
                         ps.setString(1, name);
                         ps.setString(2, color);
                         ps.setString(3, emoji);
                         ps.setString(4, badge);
                         ps.setString(5, prefix);
+                        ps.setString(6, color);
+                        ps.setString(7, emoji);
+                        ps.setString(8, badge);
+                        ps.setString(9, prefix);
                         ps.executeUpdate();
                     }
                     response.put("status", "success");
+                } else if ("/api/delete_group".equals(path) && query != null) {
+                    String name = getQueryParam(query, "name");
+                    if ("member".equals(name) || "banned".equals(name) || "op".equals(name)) {
+                        response.put("status", "error");
+                        response.put("message", "无法删除内置身份组！");
+                    } else {
+                        try (Connection conn = rankManager.getConnection();
+                             PreparedStatement ps = conn.prepareStatement("DELETE FROM `groups` WHERE name = ?")) {
+                            ps.setString(1, name);
+                            ps.executeUpdate();
+                        }
+                        try (Connection conn = rankManager.getConnection();
+                             PreparedStatement ps = conn.prepareStatement("DELETE FROM `player_groups` WHERE group_name = ?")) {
+                            ps.setString(1, name);
+                            ps.executeUpdate();
+                        }
+                        response.put("status", "success");
+                    }
+                } else if ("/api/ban".equals(path) && query != null) {
+                    String playerName = getQueryParam(query, "player");
+                    String banTimeStr = getQueryParam(query, "banTime") != null ? getQueryParam(query, "banTime").trim() : "0";
+                    long banTime = Long.parseLong(banTimeStr);
+                    String reason = getQueryParam(query, "reason") != null ? getQueryParam(query, "reason") : "未指定原因";
+                    long banUntil = banTime == -1 ? -1 : (banTime > 0 ? System.currentTimeMillis() + banTime * 60000 : 0);
+                    context.getBanManager().banPlayer(playerName, banUntil, reason);
+                    PlayerData.PlayerInfo info = playerData.getPlayerInfo(Bukkit.getOfflinePlayer(UUID.fromString(playerName)).getName());
+                    info.groups.clear();
+                    info.groups.add("banned");
+                    playerData.saveData();
+                    RankData data = rankManager.getAllRanks().getOrDefault(
+                            UUID.fromString(playerName), new RankData("member", 0));
+                    data.setBanUntil(banUntil);
+                    data.setBanReason(reason);
+                    response.put("status", "success");
+                } else if ("/api/unban".equals(path) && query != null) {
+                    String playerName = getQueryParam(query, "player");
+                    context.getBanManager().unbanPlayer(playerName);
+                    PlayerData.PlayerInfo info = playerData.getPlayerInfo(Bukkit.getOfflinePlayer(UUID.fromString(playerName)).getName());
+                    info.groups.remove("banned");
+                    if (info.groups.isEmpty()) info.groups.add("member");
+                    playerData.saveData();
+                    RankData data = rankManager.getAllRanks().getOrDefault(
+                            UUID.fromString(playerName), new RankData("member", 0));
+                    data.setBanUntil(0);
+                    data.setBanReason(null);
+                    response.put("status", "success");
                 } else {
                     response.put("status", "error");
-                    response.put("message", "啥命令啊？参数也不对");
+                    response.put("message", "无效请求: " + path);
                 }
             } catch (Exception e) {
                 response.put("status", "error");
-                response.put("message", "出错了: " + e.getMessage());
+                response.put("message", "错误: " + e.getMessage());
+                e.printStackTrace();
             }
 
             responseBody = gson.toJson(response);
@@ -203,86 +305,88 @@ public class RankServer implements Runnable {
         }
     }
 
-    static class PlayerInfoTypeAdapter extends TypeAdapter<PlayerData.PlayerInfo> {
-        @Override
-        public void write(JsonWriter out, PlayerData.PlayerInfo value) throws IOException {
-            out.beginObject();
-            out.name("name").value(value.getName());
-            out.name("uuid").value(value.getUuid().toString());
-            out.name("groups").beginArray();
-            for (String group : value.groups) {
-                out.value(group);
-            }
-            out.endArray();
-            out.endObject();
-        }
-
-        @Override
-        public PlayerData.PlayerInfo read(JsonReader in) throws IOException {
-            in.beginObject();
-            String name = null;
-            UUID uuid = null;
-            List<String> groups = new ArrayList<>();
-            while (in.hasNext()) {
-                String field = in.nextName();
-                if ("name".equals(field)) {
-                    name = in.nextString();
-                } else if ("uuid".equals(field)) {
-                    uuid = UUID.fromString(in.nextString());
-                } else if ("groups".equals(field)) {
-                    in.beginArray();
-                    while (in.hasNext()) {
-                        groups.add(in.nextString());
-                    }
-                    in.endArray();
-                } else {
-                    in.skipValue();
-                }
-            }
-            in.endObject();
-            PlayerData.PlayerInfo info = new PlayerData.PlayerInfo(name, uuid);
-            info.groups = groups;
-            return info;
-        }
-    }
-
-    static class RankDataTypeAdapter extends TypeAdapter<RankData> {
-        @Override
+    class RankDataTypeAdapter extends TypeAdapter<RankData> {
         public void write(JsonWriter out, RankData value) throws IOException {
             out.beginObject();
             out.name("rank").value(value.getRank());
             out.name("score").value(value.getScore());
             out.name("join_particle").value(value.getJoinParticle().name());
             out.name("join_message").value(value.getJoinMessage());
+            out.name("groups").value(String.join(",", value.getGroups()));
+            out.name("chat_color").value(value.getChatColor());
+            out.name("show_rank").value(value.isShowRank());
+            out.name("show_vip").value(value.isShowVip());
+            out.name("show_group").value(value.isShowGroup());
+            out.name("ban_until").value(value.getBanUntil());
+            out.name("ban_reason").value(value.getBanReason());
             out.endObject();
         }
 
-        @Override
         public RankData read(JsonReader in) throws IOException {
+            RankData data = new RankData("member", 0);
             in.beginObject();
-            String rank = "default";
-            int score = 0;
-            Particle particle = Particle.FIREWORK;
-            String joinMessage = "欢迎 {player} 加入服务器！";
             while (in.hasNext()) {
-                String field = in.nextName();
-                if ("rank".equals(field)) {
-                    rank = in.nextString();
-                } else if ("score".equals(field)) {
-                    score = in.nextInt();
-                } else if ("join_particle".equals(field)) {
-                    particle = Particle.valueOf(in.nextString());
-                } else if ("join_message".equals(field)) {
-                    joinMessage = in.nextString();
-                } else {
-                    in.skipValue();
+                String name = in.nextName();
+                switch (name) {
+                    case "rank": data.rank = in.nextString(); break;
+                    case "score": data.score = in.nextInt(); break;
+                    case "join_particle": data.setJoinParticle(Particle.valueOf(in.nextString())); break;
+                    case "join_message": data.setJoinMessage(in.nextString()); break;
+                    case "chat_color": data.setChatColor(in.nextString()); break;
+                    case "show_rank": data.setShowRank(in.nextBoolean()); break;
+                    case "show_vip": data.setShowVip(in.nextBoolean()); break;
+                    case "show_group": data.setShowGroup(in.nextBoolean()); break;
+                    case "ban_until": data.setBanUntil(in.nextLong()); break;
+                    case "ban_reason": data.setBanReason(in.nextString()); break;
+                    default: in.skipValue(); break;
                 }
             }
             in.endObject();
-            RankData data = new RankData(rank, score);
-            data.setJoinParticle(particle);
-            data.setJoinMessage(joinMessage);
             return data;
+        }
+    }
+
+    class PlayerInfoTypeAdapter extends TypeAdapter<PlayerData.PlayerInfo> {
+        public void write(JsonWriter out, PlayerData.PlayerInfo value) throws IOException {
+            out.beginObject();
+            out.name("login_count").value(value.loginCount);
+            out.name("location").beginObject();
+            out.name("world").value(value.location.getWorld().getName());
+            out.name("x").value(value.location.getX());
+            out.name("y").value(value.location.getY());
+            out.name("z").value(value.location.getZ());
+            out.endObject();
+            out.endObject();
+        }
+
+        public PlayerData.PlayerInfo read(JsonReader in) throws IOException {
+            int loginCount = 0;
+            String world = "world";
+            double x = 0, y = 0, z = 0;
+            in.beginObject();
+            while (in.hasNext()) {
+                String name = in.nextName();
+                switch (name) {
+                    case "login_count": loginCount = in.nextInt(); break;
+                    case "location":
+                        in.beginObject();
+                        while (in.hasNext()) {
+                            String locName = in.nextName();
+                            switch (locName) {
+                                case "world": world = in.nextString(); break;
+                                case "x": x = in.nextDouble(); break;
+                                case "y": y = in.nextDouble(); break;
+                                case "z": z = in.nextDouble(); break;
+                                default: in.skipValue(); break;
+                            }
+                        }
+                        in.endObject();
+                        break;
+                    default: in.skipValue(); break;
+                }
+            }
+            in.endObject();
+            return new PlayerData.PlayerInfo(loginCount, new org.bukkit.Location(Bukkit.getWorld(world), x, y, z));
         }
     }
 }

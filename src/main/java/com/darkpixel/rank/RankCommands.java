@@ -38,7 +38,6 @@ public class RankCommands implements CommandExecutor {
         }
 
         UUID uuid = Bukkit.getOfflinePlayer(playerName).getUniqueId();
-        // 设置Rank，默认粒子和消息
         rankManager.setRankByUUID(uuid, rank, score, Particle.FIREWORK, "欢迎 {player} 加入服务器！");
         sender.sendMessage("§a搞定！" + playerName + " 的 Rank 现在是 " + rank + "，分数 " + score);
         return true;

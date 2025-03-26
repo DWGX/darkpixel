@@ -7,10 +7,20 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.Particle;
+import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
-import java.sql.*;
-import java.util.*;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Collection;
 import java.util.stream.Collectors;
 
 public class PlayerData {
@@ -33,10 +43,7 @@ public class PlayerData {
         String database = config.getString("mysql.database");
         String username = config.getString("mysql.username");
         String password = config.getString("mysql.password");
-        if (host == null || database == null || username == null || password == null) {
-            throw new SQLException("MySQL 配置不完整，请检查 config.yml");
-        }
-        String url = String.format("jdbc:mysql://%s:%d/%s", host, port, database);
+        String url = String.format("jdbc:mysql://%s:%d/%s?autoReconnect=true", host, port, database);
         return DriverManager.getConnection(url, username, password);
     }
 
@@ -69,12 +76,12 @@ public class PlayerData {
                         info.groups.add(groupRs.getString("group_name"));
                     }
                 }
+                if (info.groups.isEmpty()) info.groups.add("member");
 
                 playerData.put(name, info);
             }
         } catch (SQLException e) {
             context.getPlugin().getLogger().severe("加载玩家数据失败: " + e.getMessage());
-            e.printStackTrace();
             loadDataFromYaml();
         }
     }
@@ -87,16 +94,15 @@ public class PlayerData {
             double y = config.getDouble(key + ".y", 0);
             double z = config.getDouble(key + ".z", 0);
             String world = config.getString(key + ".world", "world");
-            List<String> cheatTriggers = config.getStringList(key + ".cheatTriggers");
             long lastSignIn = config.getLong(key + ".lastSignIn", 0L);
             boolean effectsEnabled = config.getBoolean(key + ".effectsEnabled", true);
             String particle = config.getString(key + ".particle", "FIREWORK");
             PlayerInfo info = new PlayerInfo(loginCount, new Location(context.getPlugin().getServer().getWorld(world), x, y, z));
             info.signInCount = signInCount;
-            info.cheatTriggers = cheatTriggers.isEmpty() ? new ArrayList<>() : cheatTriggers;
             info.lastSignIn = lastSignIn;
             info.effectsEnabled = effectsEnabled;
             info.particle = Particle.valueOf(particle);
+            if (info.groups.isEmpty()) info.groups.add("member");
             playerData.put(key, info);
         }
     }
@@ -153,7 +159,6 @@ public class PlayerData {
             }
         } catch (SQLException e) {
             context.getPlugin().getLogger().severe("保存玩家数据失败: " + e.getMessage());
-            e.printStackTrace();
             saveDataAsync();
         }
     }
@@ -168,7 +173,6 @@ public class PlayerData {
             config.set(name + ".y", info.location.getY());
             config.set(name + ".z", info.location.getZ());
             config.set(name + ".world", info.location.getWorld().getName());
-            config.set(name + ".cheatTriggers", info.cheatTriggers);
             config.set(name + ".lastSignIn", info.lastSignIn);
             config.set(name + ".effectsEnabled", info.effectsEnabled);
             config.set(name + ".particle", info.particle.name());
@@ -195,12 +199,15 @@ public class PlayerData {
         info.foodLevel = player.getFoodLevel();
         info.inventoryContents = player.getInventory().getContents();
         info.effects = player.getActivePotionEffects();
+        if (info.groups.isEmpty()) info.groups.add("member");
         playerData.put(name, info);
         saveData();
     }
 
     public PlayerInfo getPlayerInfo(String name) {
-        return playerData.getOrDefault(name, new PlayerInfo(0, null));
+        PlayerInfo info = playerData.getOrDefault(name, new PlayerInfo(0, null));
+        if (info.groups.isEmpty()) info.groups.add("member");
+        return info;
     }
 
     public boolean isEffectsEnabled(Player player) {
@@ -217,6 +224,18 @@ public class PlayerData {
         return getPlayerInfo(player.getName()).particle;
     }
 
+    public void banPlayer(Player player, String reason) {
+        PlayerInfo info = getPlayerInfo(player.getName());
+        info.groups.clear();
+        info.groups.add("banned");
+        saveData();
+        player.kickPlayer("§c你已被封禁！原因: " + reason);
+    }
+
+    public boolean isBanned(Player player) {
+        return getPlayerInfo(player.getName()).groups.contains("banned");
+    }
+
     public static class PlayerInfo {
         public int loginCount;
         public int signInCount;
@@ -224,20 +243,11 @@ public class PlayerData {
         public double health;
         public int foodLevel;
         public ItemStack[] inventoryContents;
-        public Collection<PotionEffect> effects;
-        public List<String> cheatTriggers;
+        public @NotNull Collection<PotionEffect> effects;
         public long lastSignIn;
         public List<String> groups;
         public boolean effectsEnabled;
         public Particle particle;
-        private String name;
-        private UUID uuid;
-        public PlayerInfo(String name, UUID uuid) {
-            this.name = name;
-            this.uuid = uuid;
-        }
-        public String getName() { return name; }
-        public UUID getUuid() { return uuid; }
 
         public PlayerInfo(int loginCount, Location location) {
             this.loginCount = loginCount;
@@ -246,8 +256,7 @@ public class PlayerData {
             this.health = 20.0;
             this.foodLevel = 20;
             this.inventoryContents = new ItemStack[36];
-            this.effects = new ArrayList<>();
-            this.cheatTriggers = new ArrayList<>();
+            this.effects = new ArrayList<PotionEffect>();
             this.lastSignIn = 0L;
             this.groups = new ArrayList<>();
             this.effectsEnabled = true;
@@ -275,16 +284,12 @@ public class PlayerData {
                     .map(e -> e.getType().getName() + " (等级 " + (e.getAmplifier() + 1) + ", " + e.getDuration() / 20 + "秒)")
                     .collect(Collectors.joining(", "));
         }
-
-        public String getCheatTriggersDescription() {
-            return cheatTriggers.isEmpty() ? "No cheat triggers recorded" : String.join("\n", cheatTriggers);
-        }
     }
 
     public String analyzePlayer(Player player) {
         PlayerInfo info = getPlayerInfo(player.getName());
         return "玩家状态: " + info.health + "生命, " + info.foodLevel + "饥饿值 | 背包: " + info.getInventoryDescription() +
-                " | 效果: " + info.getEffectsDescription() + " | Cheat Triggers:\n" + info.getCheatTriggersDescription();
+                " | 效果: " + info.getEffectsDescription();
     }
 
     public void setLastSignIn(Player player, long time) {

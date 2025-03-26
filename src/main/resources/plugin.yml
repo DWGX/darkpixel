@@ -75,6 +75,11 @@ commands:
   toggleeffects:
     description: 开关进服特效
     usage: /<command>
+  darkban:
+    description: 封禁或解封玩家
+    usage: /<command> ban <player> <time> [reason] 或 /<command> unban <player>
+    permission: darkpixel.admin
+
 permissions:
   darkpixel.giveblockablesword:
     description: 允许使用 /giveblockablesword 命令
