@@ -20,7 +20,7 @@ public final class Main extends JavaPlugin {
             context = new Global(this);
             getLogger().info("Global 初始化完成");
 
-            rankServerThread = new Thread(new RankServer(context.getRankManager(), context.getPlayerData(), context), "RankServer-Thread");
+            rankServerThread = new Thread(context.getRankServer(), "RankServer-Thread");
             rankServerThread.start();
             getLogger().info("RankServer 线程已启动");
 
@@ -35,6 +35,7 @@ public final class Main extends JavaPlugin {
     @Override
     public void onDisable() {
         try {
+            // 保存 RankManager 数据
             if (context != null && context.getRankManager() != null) {
                 context.getRankManager().saveAll();
                 getLogger().info("RankManager 数据已保存");
@@ -42,35 +43,28 @@ public final class Main extends JavaPlugin {
                 getLogger().warning("RankManager 未初始化，跳过保存");
             }
 
+            // 关闭 RankServer
             if (context != null && context.getRankServer() != null) {
                 context.getRankServer().shutdown();
-                if (rankServerThread != null && rankServerThread.isAlive()) {
-                    rankServerThread.interrupt();
-                    rankServerThread.join(5000);
+                try {
+                    rankServerThread.join(5000); // 等待线程优雅关闭
                     if (rankServerThread.isAlive()) {
-                        getLogger().warning("RankServer 线程未能及时关闭");
+                        getLogger().warning("RankServer 线程未能及时关闭，可能存在资源泄漏");
                     } else {
                         getLogger().info("RankServer 线程已关闭");
                     }
+                } catch (InterruptedException e) {
+                    getLogger().severe("等待 RankServer 线程关闭时被中断: " + e.getMessage());
+                    Thread.currentThread().interrupt();
                 }
             } else {
                 getLogger().warning("RankServer 未初始化，跳过关闭");
             }
 
-            if (!Global.executor.isShutdown()) {
-                Global.executor.shutdown();
-                try {
-                    if (!Global.executor.awaitTermination(15, TimeUnit.SECONDS)) {
-                        var pendingTasks = Global.executor.shutdownNow();
-                        getLogger().warning("线程池强制关闭，剩余 " + pendingTasks.size() + " 个未完成任务");
-                    } else {
-                        getLogger().info("线程池已优雅关闭");
-                    }
-                } catch (InterruptedException e) {
-                    Global.executor.shutdownNow();
-                    getLogger().severe("线程池关闭被中断: " + e.getMessage());
-                    Thread.currentThread().interrupt();
-                }
+            // 清理 Global 资源
+            if (context != null) {
+                context.shutdown();
+                getLogger().info("Global 资源已清理");
             }
 
             getLogger().info("DarkPixel v1.0 已成功禁用");

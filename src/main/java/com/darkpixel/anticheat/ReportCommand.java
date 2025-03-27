@@ -5,7 +5,7 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
-import org.bukkit.scheduler.BukkitRunnable;
+
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -17,7 +17,6 @@ public class ReportCommand implements CommandExecutor {
 
     public ReportCommand(AntiCheatHandler handler) {
         this.handler = handler;
-        startCooldownCleanup();
     }
 
     @Override
@@ -48,31 +47,7 @@ public class ReportCommand implements CommandExecutor {
         }
         cooldowns.put(uuid, now);
         handler.addReport(target, player);
-        player.sendMessage("§a已举报 " + target.getName() + "！若多人举报，将触发AI审查。");
-        notifyAdmins(player, target);
+        player.sendMessage("§a已举报 " + target.getName() + "！");
         return true;
-    }
-
-    private void notifyAdmins(Player reporter, Player target) {
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                for (Player admin : Bukkit.getOnlinePlayers()) {
-                    if (admin.hasPermission("darkpixel.admin") && !admin.equals(reporter)) {
-                        admin.sendMessage("§e" + reporter.getName() + " 举报了 " + target.getName() + "，请注意观察。");
-                    }
-                }
-            }
-        }.runTaskAsynchronously(handler.getContext().getPlugin());
-    }
-
-    private void startCooldownCleanup() {
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                long now = System.currentTimeMillis();
-                cooldowns.entrySet().removeIf(entry -> (now - entry.getValue()) >= COOLDOWN_TIME);
-            }
-        }.runTaskTimer(handler.getContext().getPlugin(), 0L, 600L);
     }
 }

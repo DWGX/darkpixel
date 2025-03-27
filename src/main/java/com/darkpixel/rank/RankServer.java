@@ -13,10 +13,12 @@ import org.bukkit.Bukkit;
 import org.bukkit.Particle;
 import org.bukkit.entity.Player;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -31,46 +33,108 @@ public class RankServer implements Runnable {
     private final PlayerData playerData;
     private final Global context;
     private final Gson gson;
-    private final int port;
+    private int port;
     private volatile boolean running = true;
     private HttpServer server;
+    private static final File LOCK_FILE = new File("plugins/DarkPixel/rankserver.lock");
 
     public RankServer(RankManager rankManager, PlayerData playerData, Global context) {
         this.rankManager = rankManager;
         this.playerData = playerData;
         this.context = context;
-        this.port = context.getConfigManager().getConfig().getInt("http_port", 25567);
+        this.port = findAvailablePort(context.getConfigManager().getConfig().getInt("http_port", 25567));
         this.gson = new GsonBuilder()
                 .registerTypeAdapter(PlayerData.PlayerInfo.class, new PlayerInfoTypeAdapter())
                 .registerTypeAdapter(RankData.class, new RankDataTypeAdapter())
                 .create();
     }
 
+    private int findAvailablePort(int defaultPort) {
+        int currentPort = defaultPort;
+        while (LOCK_FILE.exists()) {
+            try {
+                String lockContent = Files.readString(LOCK_FILE.toPath());
+                int lockedPort = Integer.parseInt(lockContent.trim());
+                if (lockedPort == currentPort) {
+                    currentPort++;
+                } else {
+                    break;
+                }
+            } catch (IOException | NumberFormatException e) {
+                currentPort++;
+            }
+        }
+        return currentPort;
+    }
+
+    @Override
     public void run() {
+        if (isRankServerRunning() && port == context.getConfigManager().getConfig().getInt("http_port", 25567)) {
+            context.getPlugin().getLogger().info("检测到默认端口 " + port + " 已占用，本实例将仅同步数据库");
+            while (running && !Thread.currentThread().isInterrupted()) {
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    running = false;
+                }
+            }
+            return;
+        }
+
         try {
             server = HttpServer.create(new InetSocketAddress(port), 0);
             server.createContext("/api", new ApiHandler());
             server.setExecutor(null);
             server.start();
+            createLockFile();
+            context.getPlugin().getLogger().info("RankServer 已启动，监听端口: " + port);
+
             while (running && !Thread.currentThread().isInterrupted()) {
-                Thread.sleep(1000);
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    running = false;
+                }
             }
-        } catch (IOException | InterruptedException e) {
+        } catch (IOException e) {
+            context.getPlugin().getLogger().severe("RankServer 启动失败: " + e.getMessage());
             e.printStackTrace();
         } finally {
-            stopServer();
+            shutdown();
         }
     }
 
-    private void stopServer() {
-        if (server != null) {
-            server.stop(0);
+    private boolean isRankServerRunning() {
+        return LOCK_FILE.exists();
+    }
+
+    private void createLockFile() throws IOException {
+        if (!LOCK_FILE.getParentFile().exists()) {
+            LOCK_FILE.getParentFile().mkdirs();
         }
+        Files.writeString(LOCK_FILE.toPath(), String.valueOf(port));
     }
 
     public void shutdown() {
         running = false;
-        stopServer();
+        if (server != null) {
+            server.stop(0);
+            server = null;
+            try {
+                if (isRankServerRunning() && port == Integer.parseInt(Files.readString(LOCK_FILE.toPath()).trim())) {
+                    LOCK_FILE.delete();
+                    context.getPlugin().getLogger().info("RankServer 已停止，端口 " + port + " 已释放");
+                }
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
+    public int getPort() {
+        return port;
     }
 
     class ApiHandler implements com.sun.net.httpserver.HttpHandler {
@@ -256,8 +320,7 @@ public class RankServer implements Runnable {
                     info.groups.clear();
                     info.groups.add("banned");
                     playerData.saveData();
-                    RankData data = rankManager.getAllRanks().getOrDefault(
-                            UUID.fromString(playerName), new RankData("member", 0));
+                    RankData data = rankManager.getAllRanks().getOrDefault(UUID.fromString(playerName), new RankData("member", 0));
                     data.setBanUntil(banUntil);
                     data.setBanReason(reason);
                     response.put("status", "success");
@@ -268,8 +331,7 @@ public class RankServer implements Runnable {
                     info.groups.remove("banned");
                     if (info.groups.isEmpty()) info.groups.add("member");
                     playerData.saveData();
-                    RankData data = rankManager.getAllRanks().getOrDefault(
-                            UUID.fromString(playerName), new RankData("member", 0));
+                    RankData data = rankManager.getAllRanks().getOrDefault(UUID.fromString(playerName), new RankData("member", 0));
                     data.setBanUntil(0);
                     data.setBanReason(null);
                     response.put("status", "success");

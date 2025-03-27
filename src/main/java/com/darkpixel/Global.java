@@ -28,6 +28,7 @@ import com.darkpixel.utils.SitUtils;
 import com.darkpixel.utils.WorldData;
 import com.darkpixel.utils.effects.PlayerJoinEffects;
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.event.HandlerList;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.concurrent.ExecutorService;
@@ -96,6 +97,11 @@ public class Global {
         this.banManager = new BanManager(this);
 
         new CommandManager(this);
+        registerEvents();
+        executor.submit(() -> configManager.reloadAllConfigsAsync());
+    }
+
+    private void registerEvents() {
         plugin.getServer().getPluginManager().registerEvents(new ChatListener(playerData, rankManager), plugin);
         plugin.getServer().getPluginManager().registerEvents(new PlayerJoinEffects(playerData), plugin);
         plugin.getCommand("rank").setExecutor(new RankCommands(rankManager));
@@ -115,7 +121,48 @@ public class Global {
         plugin.getServer().getPluginManager().registerEvents(antiCheatHandler, plugin);
         plugin.getServer().getPluginManager().registerEvents(serverSwitchChest, plugin);
         plugin.getServer().getPluginManager().registerEvents(serverRadioChest, plugin);
-        Global.executor.submit(() -> configManager.reloadAllConfigsAsync());
+    }
+
+    public void shutdown() {
+        HandlerList.unregisterAll(plugin);
+
+        if (rankServer != null) {
+            rankServer.shutdown();
+        }
+
+        if (!executor.isShutdown()) {
+            executor.shutdown();
+            try {
+                if (!executor.awaitTermination(15, TimeUnit.SECONDS)) {
+                    var pendingTasks = executor.shutdownNow();
+                    plugin.getLogger().warning("线程池强制关闭，剩余 " + pendingTasks.size() + " 个未完成任务");
+                } else {
+                    plugin.getLogger().info("线程池已优雅关闭");
+                }
+            } catch (InterruptedException e) {
+                executor.shutdownNow();
+                plugin.getLogger().severe("线程池关闭被中断: " + e.getMessage());
+                Thread.currentThread().interrupt();
+            }
+        }
+
+        if (playerData != null) {
+            playerData.saveData();
+        }
+
+        if (rankManager != null) {
+            rankManager.saveAll();
+        }
+    }
+
+    public void updateSitUtils() {
+        if (sitUtils != null) {
+            HandlerList.unregisterAll(sitUtils);
+        }
+        this.sitUtils = configManager.getConfig().getBoolean("sitting.enabled", true) ? new SitUtils(this) : null;
+        if (sitUtils != null) {
+            plugin.getServer().getPluginManager().registerEvents(sitUtils, plugin);
+        }
     }
 
     public JavaPlugin getPlugin() {
@@ -204,10 +251,5 @@ public class Global {
 
     public YamlConfiguration getConfig() {
         return configManager.getConfig();
-    }
-
-    public void updateSitUtils() {
-        this.sitUtils = configManager.getConfig().getBoolean("sitting.enabled", true) ? new SitUtils(this) : null;
-        if (sitUtils != null) plugin.getServer().getPluginManager().registerEvents(sitUtils, plugin);
     }
 }

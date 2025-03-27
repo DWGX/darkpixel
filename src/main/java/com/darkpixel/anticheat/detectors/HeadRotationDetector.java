@@ -1,42 +1,54 @@
 package com.darkpixel.anticheat.detectors;
 
 import com.darkpixel.anticheat.AntiCheatHandler;
-import com.darkpixel.anticheat.Detector;
-import com.darkpixel.anticheat.PlayerCheatData;
+import com.darkpixel.anticheat.CheckPlayer;
+import com.github.retrooper.packetevents.event.PacketReceiveEvent;
+import com.github.retrooper.packetevents.protocol.packettype.PacketType;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientPlayerPositionAndRotation;
 import org.bukkit.configuration.file.YamlConfiguration;
-import org.bukkit.entity.Player;
 
-public class HeadRotationDetector implements Detector {
-    private final double maxSpeed;
-    private final AntiCheatHandler handler;
+import java.util.Map;
+import java.util.UUID;
 
-    public HeadRotationDetector(YamlConfiguration config, AntiCheatHandler handler) {
-        this.maxSpeed = config.getDouble("detectors.head_rotation.max_speed", 200.0);
-        this.handler = handler;
+public class HeadRotationDetector extends AbstractCheckDetector {
+    private final double maxAngle;
+    private final long minTimeMs;
+
+    public HeadRotationDetector(YamlConfiguration config, AntiCheatHandler handler, Map<UUID, CheckPlayer> checkPlayers) {
+        super(config, handler, checkPlayers);
+        this.maxAngle = config.getDouble("detectors.head_rotation.max_angle", 90.0);
+        this.minTimeMs = config.getLong("detectors.head_rotation.min_time_ms", 50);
     }
 
     @Override
-    public void check(Player player, PlayerCheatData data, long timestamp, double... args) {
-        float yaw = (float) args[0];
-        float pitch = (float) args[1];
-        if (data.lastYaw != null && data.lastPitch != null && data.lastPacketTime > 0) {
-            double deltaYaw = Math.abs(normalizeAngle(yaw - data.lastYaw));
-            double deltaPitch = Math.abs(normalizeAngle(pitch - data.lastPitch));
-            double deltaTime = (timestamp - data.lastPacketTime) / 1000.0;
+    public void onPacketReceive(PacketReceiveEvent event) {
+        if (event.getPacketType().equals(PacketType.Play.Client.PLAYER_POSITION_AND_ROTATION)) {
+            WrapperPlayClientPlayerPositionAndRotation posRot = new WrapperPlayClientPlayerPositionAndRotation(event);
+            CheckPlayer checkPlayer = checkPlayers.get(((org.bukkit.entity.Player) event.getPlayer()).getUniqueId());
 
-            if (deltaTime < 0.01) return;
+            if (checkPlayer == null) return;
 
-            double yawSpeed = deltaYaw / deltaTime;
-            double pitchSpeed = deltaPitch / deltaTime;
+            float currentYaw = posRot.getYaw();
+            float currentPitch = posRot.getPitch();
+            float previousYaw = checkPlayer.getYaw();
+            float previousPitch = checkPlayer.getPitch();
 
-            if (yawSpeed > maxSpeed || pitchSpeed > maxSpeed) {
-                handler.triggerAlert(player, AntiCheatHandler.CheatType.FAST_HEAD_ROTATION,
-                        "Yaw Speed: " + String.format("%.2f", yawSpeed) + ", Pitch Speed: " + String.format("%.2f", pitchSpeed));
+            long now = System.currentTimeMillis();
+            long lastPacketTime = checkPlayer.getPreviousPacketEvent() != null ? checkPlayer.getPreviousPacketEvent().getTimestamp() : now;
+            long deltaTimeMs = now - lastPacketTime;
+
+            if (deltaTimeMs < 1) deltaTimeMs = 1; // 避免除零
+
+            if (deltaTimeMs < minTimeMs) {
+                float deltaYaw = Math.abs(normalizeAngle(currentYaw - previousYaw));
+                float deltaPitch = Math.abs(normalizeAngle(currentPitch - previousPitch));
+                if (deltaYaw > maxAngle || deltaPitch > maxAngle) {
+                    float speed = Math.max(deltaYaw, deltaPitch) / (deltaTimeMs / 1000.0f);
+                    handler.triggerAlert(checkPlayer.getPlayer(), AntiCheatHandler.CheatType.FAST_HEAD_ROTATION,
+                            String.format("Yaw: %.1f°, Pitch: %.1f°, Speed: %.1f°/s", deltaYaw, deltaPitch, speed));
+                }
             }
         }
-        data.lastYaw = yaw;
-        data.lastPitch = pitch;
-        data.lastPacketTime = timestamp;
     }
 
     private float normalizeAngle(float angle) {
