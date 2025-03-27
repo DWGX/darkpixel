@@ -30,17 +30,31 @@ function fetchGroups() {
         .then(data => {
             if (data.status === "success") {
                 availableGroups = data.groups.map(g => g.name);
-                renderPlayers(allPlayers); // 刷新玩家列表以更新身份组选项
+                renderPlayers(allPlayers);
                 const groupList = document.getElementById("group-list");
                 groupList.innerHTML = "";
                 data.groups.forEach(group => {
-                    const div = document.createElement("div");
-                    div.className = "group-item";
-                    div.innerHTML = `
-                        <span style="color: ${group.color}">[${group.prefix || group.name}] ${group.name}</span>
-                        <button onclick="deleteGroup('${group.name}')" class="btn danger-btn"><i class="fas fa-trash"></i></button>
-                    `;
-                    groupList.appendChild(div);
+                    fetch(`${apiBase}/get_group_members?group=${group.name}`)
+                        .then(res => res.json())
+                        .then(membersData => {
+                            const members = membersData.members || [];
+                            const div = document.createElement("div");
+                            div.className = "group-item";
+                            div.innerHTML = `
+                                <span style="color: ${group.color}">[${group.prefix || group.name}] ${group.name}</span>
+                                <button onclick="deleteGroup('${group.name}')" class="btn danger-btn"><i class="fas fa-trash"></i></button>
+                                <div class="group-members">
+                                    ${members.map(member => `
+                                        <div class="member">
+                                            <img src="https://minotar.net/avatar/${member.name}/32" alt="${member.name}" class="member-avatar">
+                                            <span>${member.name}</span>
+                                        </div>
+                                    `).join("")}
+                                </div>
+                            `;
+                            groupList.appendChild(div);
+                        })
+                        .catch(err => console.error(`获取 ${group.name} 成员失败:`, err));
                 });
             }
         })
@@ -50,15 +64,17 @@ function fetchGroups() {
 function renderPlayers(players) {
     const playerList = document.getElementById("player-list");
     playerList.innerHTML = players.length === 0 ? "<p class='no-data'>暂无玩家数据</p>" : "";
+    const expandedPlayers = JSON.parse(localStorage.getItem("expandedPlayers") || "[]");
     players.forEach((player, index) => {
+        const isExpanded = expandedPlayers.includes(player.uuid);
         const card = document.createElement("div");
         card.className = "player-card";
         card.id = `player-${player.uuid}`;
-        card.style.animationDelay = `${index * 0.1}s`; // 卡牌逐个出现
+        card.style.animationDelay = `${index * 0.1}s`;
         const currentGroup = player.groups && player.groups.length > 0 ? player.groups[0] : "member";
         card.innerHTML = `
             <div class="accordion">
-                <input type="checkbox" id="toggle-${player.uuid}" class="accordion-toggle">
+                <input type="checkbox" id="toggle-${player.uuid}" class="accordion-toggle" ${isExpanded ? "checked" : ""}>
                 <label for="toggle-${player.uuid}" class="accordion-header">
                     <i class="fas fa-user"></i> 
                     <span class="player-name ${player.online ? 'online' : 'offline'}">${player.name}</span> 
@@ -138,6 +154,21 @@ function renderPlayers(players) {
             </div>
         `;
         playerList.appendChild(card);
+        const toggle = document.getElementById(`toggle-${player.uuid}`);
+        toggle.addEventListener("change", () => {
+            const expanded = JSON.parse(localStorage.getItem("expandedPlayers") || "[]");
+            if (toggle.checked) {
+                if (!expanded.includes(player.uuid)) {
+                    expanded.push(player.uuid);
+                }
+            } else {
+                const index = expanded.indexOf(player.uuid);
+                if (index > -1) {
+                    expanded.splice(index, 1);
+                }
+            }
+            localStorage.setItem("expandedPlayers", JSON.stringify(expanded));
+        });
     });
 }
 
@@ -288,12 +319,17 @@ function deleteGroup(name) {
     }
 }
 
-// 实时搜索
 document.getElementById("search-input").addEventListener("input", searchPlayers);
+
+document.getElementById("refresh-btn").addEventListener("click", () => {
+    fetchPlayers();
+    fetchGroups();
+});
 
 setInterval(() => {
     fetchPlayers();
     fetchGroups();
-}, 5000);
+}, 10000);
+
 fetchPlayers();
 fetchGroups();
