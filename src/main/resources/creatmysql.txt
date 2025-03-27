@@ -1,0 +1,62 @@
+-- 创建 players 表，存储玩家数据
+CREATE TABLE IF NOT EXISTS players (
+    uuid VARCHAR(36) PRIMARY KEY,                  -- 玩家 UUID，主键
+    name VARCHAR(16) NOT NULL,                     -- 玩家名称
+    `rank` VARCHAR(50) DEFAULT 'member',           -- 玩家等级
+    score INT DEFAULT 0,                           -- 玩家分数
+    join_particle VARCHAR(50) DEFAULT 'FIREWORK',  -- 加入粒子效果
+    join_message VARCHAR(255) DEFAULT '欢迎 {player} 加入服务器！', -- 加入消息
+    chat_color VARCHAR(50) DEFAULT 'normal',       -- 聊天颜色
+    show_rank BOOLEAN DEFAULT FALSE,               -- 是否显示等级，默认改为 FALSE
+    show_vip BOOLEAN DEFAULT FALSE,                -- 是否显示 VIP 状态，默认改为 FALSE
+    show_group BOOLEAN DEFAULT TRUE,               -- 是否显示组，默认改为 TRUE
+    ban_until BIGINT DEFAULT 0,                    -- 封禁到期时间
+    ban_reason VARCHAR(255),                       -- 封禁原因
+    login_count INT DEFAULT 0,                     -- 登录次数（字段名规范化）
+    sign_in_count INT DEFAULT 0,                   -- 签到次数（字段名规范化）
+    x DOUBLE DEFAULT 0,                            -- X 坐标
+    y DOUBLE DEFAULT 0,                            -- Y 坐标
+    z DOUBLE DEFAULT 0,                            -- Z 坐标
+    world VARCHAR(50) DEFAULT 'world',             -- 世界名称
+    last_sign_in BIGINT DEFAULT 0,                 -- 上次签到时间（字段名规范化）
+    effects_enabled BOOLEAN DEFAULT TRUE,          -- 是否启用效果（字段名规范化）
+    particle VARCHAR(50) DEFAULT 'FIREWORK',       -- 玩家粒子效果
+    INDEX idx_name (name),                         -- 添加索引以加速按名字查询
+    INDEX idx_rank (rank)                          -- 添加索引以加速按等级查询
+) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- 创建 groups 表，存储组信息
+CREATE TABLE IF NOT EXISTS `groups` (
+    name VARCHAR(50) PRIMARY KEY,                  -- 组名称，主键
+    color VARCHAR(50),                             -- 组颜色
+    emoji VARCHAR(50),                             -- 组表情符号
+    badge VARCHAR(50),                             -- 组徽章
+    prefix VARCHAR(50)                             -- 组前缀
+) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- 创建 player_groups 表，存储玩家与组的关系
+CREATE TABLE IF NOT EXISTS player_groups (
+    uuid VARCHAR(36),                              -- 玩家 UUID
+    player_name VARCHAR(16),                       -- 玩家名称
+    group_name VARCHAR(50),                        -- 组名称
+    PRIMARY KEY (uuid, group_name),                -- 复合主键
+    FOREIGN KEY (uuid) REFERENCES players(uuid) ON DELETE CASCADE,   -- 外键关联 players 表，级联删除
+    FOREIGN KEY (group_name) REFERENCES `groups`(name) ON DELETE CASCADE, -- 外键关联 groups 表，级联删除
+    INDEX idx_uuid (uuid)                          -- 添加索引以加速查询
+) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- 创建 bans 表，存储封禁信息
+CREATE TABLE IF NOT EXISTS bans (
+    uuid VARCHAR(36) PRIMARY KEY,                  -- 玩家 UUID，主键
+    player_name VARCHAR(16),                       -- 玩家名称
+    ip VARCHAR(50),                                -- 玩家 IP 地址
+    client_identifier VARCHAR(255),                -- 客户端标识符
+    ban_until BIGINT,                              -- 封禁到期时间
+    ban_reason VARCHAR(255),                       -- 封禁原因
+    INDEX idx_player_name (player_name)            -- 添加索引以加速按名字查询
+) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- 创建 blacklist 表，存储黑名单
+CREATE TABLE IF NOT EXISTS blacklist (
+    identifier VARCHAR(255) PRIMARY KEY            -- 黑名单标识符，主键
+) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

@@ -1,7 +1,6 @@
 package com.darkpixel.rank;
 
 import com.darkpixel.Global;
-import com.darkpixel.utils.PlayerData;
 import org.bukkit.Bukkit;
 import org.bukkit.Particle;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -12,7 +11,6 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -29,11 +27,7 @@ public class RankManager {
 
     public RankManager(Global context) {
         this.context = context;
-        Global.executor.submit(() -> {
-            loadGroups();
-            loadPlayerGroups();
-            loadAllRanks();
-        });
+        Global.executor.submit(this::reload);
     }
 
     public Connection getConnection() throws SQLException {
@@ -42,95 +36,42 @@ public class RankManager {
         return DriverManager.getConnection(url, config.getString("mysql.username"), config.getString("mysql.password"));
     }
 
-    private void loadGroups() {
+    private void loadGroups() throws SQLException {
         try (Connection conn = getConnection();
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery("SELECT * FROM `groups`")) {
+             ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM `groups`")) {
             while (rs.next()) {
-                String name = rs.getString("name");
-                String color = rs.getString("color");
-                String emoji = rs.getString("emoji");
-                String badge = rs.getString("badge");
-                String prefix = rs.getString("prefix");
-                groups.put(name, new RankGroup(name, color, emoji, badge, prefix));
+                groups.put(rs.getString("name"), new RankGroup(rs.getString("name"), rs.getString("color"), rs.getString("emoji"), rs.getString("badge"), rs.getString("prefix")));
             }
-            if (!groups.containsKey("op")) {
-                groups.put("op", new RankGroup("op", "§c", "", "", "[OP]"));
-                saveGroupToDatabase("op", "§c", "", "", "[OP]");
-            }
-            if (!groups.containsKey("member")) {
-                groups.put("member", new RankGroup("member", "§f", "", "", "[Member]"));
-                saveGroupToDatabase("member", "§f", "", "", "[Member]");
-            }
-            if (!groups.containsKey("banned")) {
-                groups.put("banned", new RankGroup("banned", "§c", "", "", "[Banned]"));
-                saveGroupToDatabase("banned", "§c", "", "", "[Banned]");
-            }
-        } catch (SQLException e) {
-            groups.put("default", new RankGroup("default", "§f", "", "", "[默认]"));
-            e.printStackTrace();
+            if (!groups.containsKey("op")) groups.put("op", new RankGroup("op", "§c", "", "", "[OP]"));
+            if (!groups.containsKey("member")) groups.put("member", new RankGroup("member", "§f", "", "", "[Member]"));
+            if (!groups.containsKey("banned")) groups.put("banned", new RankGroup("banned", "§c", "", "", "[Banned]"));
         }
     }
 
-    private void saveGroupToDatabase(String name, String color, String emoji, String badge, String prefix) {
+    private void loadPlayerGroups() throws SQLException {
         try (Connection conn = getConnection();
-             PreparedStatement ps = conn.prepareStatement(
-                     "INSERT INTO `groups` (name, color, emoji, badge, prefix) VALUES (?, ?, ?, ?, ?) " +
-                             "ON DUPLICATE KEY UPDATE color = ?, emoji = ?, badge = ?, prefix = ?")) {
-            ps.setString(1, name);
-            ps.setString(2, color);
-            ps.setString(3, emoji);
-            ps.setString(4, badge);
-            ps.setString(5, prefix);
-            ps.setString(6, color);
-            ps.setString(7, emoji);
-            ps.setString(8, badge);
-            ps.setString(9, prefix);
-            ps.executeUpdate();
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void loadPlayerGroups() {
-        try (Connection conn = getConnection();
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery("SELECT * FROM player_groups")) {
+             ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM player_groups")) {
             while (rs.next()) {
                 UUID uuid = UUID.fromString(rs.getString("uuid"));
-                String group = rs.getString("group_name");
-                playerGroups.computeIfAbsent(uuid, k -> new ArrayList<>()).add(group);
+                playerGroups.computeIfAbsent(uuid, k -> new ArrayList<>()).add(rs.getString("group_name"));
             }
-        } catch (SQLException e) {
-            e.printStackTrace();
         }
     }
 
-    private void loadAllRanks() {
+    private void loadAllRanks() throws SQLException {
         try (Connection conn = getConnection();
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery("SELECT * FROM players")) {
+             ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM players")) {
             while (rs.next()) {
                 UUID uuid = UUID.fromString(rs.getString("uuid"));
-                String rank = rs.getString("rank") != null ? rs.getString("rank") : "member";
-                int score = rs.getInt("score");
-                String particle = rs.getString("join_particle");
-                String message = rs.getString("join_message");
-                String chatColor = rs.getString("chat_color");
-                boolean showRank = rs.getBoolean("show_rank");
-                boolean showVip = rs.getBoolean("show_vip");
-                boolean showGroup = rs.getBoolean("show_group");
-                long banUntil = rs.getLong("ban_until");
-                String banReason = rs.getString("ban_reason");
-                RankData data = new RankData(rank, score);
-                data.setJoinParticle(particle != null ? Particle.valueOf(particle) : Particle.FIREWORK);
-                data.setJoinMessage(message != null ? message : "欢迎 {player} 加入服务器！");
-                data.setChatColor(chatColor != null ? chatColor : "normal");
-                data.setShowRank(showRank);
-                data.setShowVip(showVip);
-                data.setShowGroup(showGroup);
-                data.setBanUntil(banUntil);
-                data.setBanReason(banReason);
+                RankData data = new RankData(rs.getString("rank") != null ? rs.getString("rank") : "member", rs.getInt("score"));
+                data.setJoinParticle(rs.getString("join_particle") != null ? Particle.valueOf(rs.getString("join_particle")) : Particle.FIREWORK);
+                data.setJoinMessage(rs.getString("join_message") != null ? rs.getString("join_message") : "欢迎 {player} 加入服务器！");
+                data.setChatColor(rs.getString("chat_color") != null ? rs.getString("chat_color") : "normal");
+                data.setShowRank(rs.getBoolean("show_rank"));
+                data.setShowVip(rs.getBoolean("show_vip"));
+                data.setShowGroup(rs.getBoolean("show_group"));
+                data.setBanUntil(rs.getLong("ban_until"));
+                data.setBanReason(rs.getString("ban_reason"));
                 List<String> groups = new ArrayList<>();
                 try (PreparedStatement ps = conn.prepareStatement("SELECT group_name FROM player_groups WHERE uuid = ?")) {
                     ps.setString(1, uuid.toString());
@@ -139,12 +80,9 @@ public class RankManager {
                         groups.add(groupRs.getString("group_name"));
                     }
                 }
-                if (groups.isEmpty()) groups.add("member");
-                data.setGroups(groups);
+                data.setGroups(groups.isEmpty() ? Collections.singletonList("member") : groups);
                 allRanks.put(uuid, data);
             }
-        } catch (SQLException e) {
-            e.printStackTrace();
         }
     }
 
@@ -182,8 +120,7 @@ public class RankManager {
                      "INSERT INTO players (uuid, name, `rank`, score, join_particle, join_message, chat_color, show_rank, show_vip, show_group, ban_until, ban_reason, loginCount) " +
                              "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE " +
                              "`rank` = ?, score = ?, join_particle = ?, join_message = ?, chat_color = ?, show_rank = ?, show_vip = ?, show_group = ?, ban_until = ?, ban_reason = ?, loginCount = ?")) {
-            PlayerData.PlayerInfo playerInfo = context.getPlayerData().getPlayerInfo(playerName);
-            int loginCount = (playerInfo != null) ? playerInfo.loginCount : 0;
+            int loginCount = context.getPlayerData().getPlayerInfo(playerName).loginCount;
             ps.setString(1, uuid.toString());
             ps.setString(2, playerName);
             ps.setString(3, data.getRank());
@@ -217,53 +154,25 @@ public class RankManager {
     public void setPlayerGroups(UUID uuid, List<String> newGroups) {
         List<String> validGroups = new ArrayList<>();
         for (String group : newGroups) {
-            if (groups.containsKey(group)) {
-                validGroups.add(group);
-            }
+            if (groups.containsKey(group)) validGroups.add(group);
         }
-        if (validGroups.isEmpty()) {
-            validGroups.add("member");
-        }
+        if (validGroups.isEmpty()) validGroups.add("member");
         playerGroups.put(uuid, validGroups);
         Global.executor.submit(() -> {
             try (Connection conn = getConnection()) {
-                String playerName = context.getPlugin().getServer().getOfflinePlayer(uuid).getName();
+                String playerName = Bukkit.getOfflinePlayer(uuid).getName();
                 if (playerName != null) {
-                    try (PreparedStatement ps = conn.prepareStatement("SELECT COUNT(*) FROM players WHERE uuid = ?")) {
+                    try (PreparedStatement ps = conn.prepareStatement("DELETE FROM player_groups WHERE uuid = ?")) {
                         ps.setString(1, uuid.toString());
-                        ResultSet rs = ps.executeQuery();
-                        if (rs.next() && rs.getInt(1) == 0) {
-                            try (PreparedStatement insertPs = conn.prepareStatement(
-                                    "INSERT INTO players (uuid, name, `rank`, score, join_particle, join_message, chat_color, show_rank, show_vip, show_group, ban_until, ban_reason, loginCount) " +
-                                            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")) {
-                                insertPs.setString(1, uuid.toString());
-                                insertPs.setString(2, playerName);
-                                insertPs.setString(3, "member");
-                                insertPs.setInt(4, 0);
-                                insertPs.setString(5, Particle.FIREWORK.name());
-                                insertPs.setString(6, "欢迎 {player} 加入服务器！");
-                                insertPs.setString(7, "normal");
-                                insertPs.setBoolean(8, true);
-                                insertPs.setBoolean(9, true);
-                                insertPs.setBoolean(10, false);
-                                insertPs.setLong(11, 0);
-                                insertPs.setString(12, null);
-                                insertPs.setInt(13, 0);
-                                insertPs.executeUpdate();
-                            }
-                        }
-                    }
-                }
-                try (PreparedStatement ps = conn.prepareStatement("DELETE FROM player_groups WHERE uuid = ?")) {
-                    ps.setString(1, uuid.toString());
-                    ps.executeUpdate();
-                }
-                try (PreparedStatement ps = conn.prepareStatement("INSERT INTO player_groups (uuid, group_name, player_name) VALUES (?, ?, ?)")) {
-                    for (String group : validGroups) {
-                        ps.setString(1, uuid.toString());
-                        ps.setString(2, group);
-                        ps.setString(3, playerName != null ? playerName : "");
                         ps.executeUpdate();
+                    }
+                    try (PreparedStatement ps = conn.prepareStatement("INSERT INTO player_groups (uuid, group_name, player_name) VALUES (?, ?, ?)")) {
+                        for (String group : validGroups) {
+                            ps.setString(1, uuid.toString());
+                            ps.setString(2, group);
+                            ps.setString(3, playerName);
+                            ps.executeUpdate();
+                        }
                     }
                 }
             } catch (SQLException e) {
@@ -286,13 +195,18 @@ public class RankManager {
         }
     }
 
+
     public void reload() {
         playerGroups.clear();
         groups.clear();
         allRanks.clear();
-        loadGroups();
-        loadPlayerGroups();
-        loadAllRanks();
+        try {
+            loadGroups();
+            loadPlayerGroups();
+            loadAllRanks();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
     }
 
     public Map<UUID, RankData> getAllRanks() {

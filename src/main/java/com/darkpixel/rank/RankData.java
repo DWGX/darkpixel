@@ -22,17 +22,16 @@ public class RankData {
         this.rank = rank;
         this.score = score;
         this.joinParticle = Particle.FIREWORK;
-        this.joinMessage = "§e欢迎 §b{player} §e加入服务器！";
+        this.joinMessage = "欢迎 {player} 加入服务器！";
         this.chatColor = "normal";
-        this.showRank = true;
-        this.showVip = true;
-        this.showGroup = false;
+        this.showRank = false; // 默认不展示Rank
+        this.showVip = false;
+        this.showGroup = true; // 默认展示身份组
         this.banUntil = 0;
         this.banReason = null;
         this.groups = new ArrayList<>();
     }
 
-    // Getter 和 Setter 方法保持不变，略去以节省篇幅
     public String getRank() { return rank; }
     public void setRank(String rank) { this.rank = rank; }
     public int getScore() { return score; }

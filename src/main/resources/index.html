@@ -14,13 +14,12 @@
         <span id="status" class="status-indicator">加载中...</span>
     </div>
     <div class="search-bar">
-        <input type="text" id="search-input" placeholder="搜索玩家..." class="input-field">
-        <button onclick="searchPlayers()" class="btn primary-btn"><i class="fas fa-search"></i></button>
+        <input type="text" id="search-input" placeholder="实时搜索玩家..." class="input-field">
     </div>
     <div id="player-list" class="player-list"></div>
     <div class="group-management">
         <div class="accordion">
-            <input type="checkbox" id="group-toggle" class="accordion-toggle">
+            <input type="checkbox" id="group-toggle" class="accordion-toggle" checked>
             <label for="group-toggle" class="accordion-header"><i class="fas fa-users"></i> 身份组管理</label>
             <div class="accordion-content">
                 <div id="group-list" class="group-list"></div>
@@ -35,6 +34,9 @@
             </div>
         </div>
     </div>
+    <footer class="footer">
+        <p>黑像素服务器管理面板 &copy; 2025 | Powered by DWGX1338</p>
+    </footer>
 </div>
 <script src="script.js"></script>
 </body>
