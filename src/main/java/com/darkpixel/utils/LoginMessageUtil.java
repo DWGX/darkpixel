@@ -3,6 +3,7 @@ package com.darkpixel.utils;
 import com.darkpixel.Global;
 import com.darkpixel.ai.AiChatHandler;
 import com.darkpixel.manager.ConfigManager;
+import com.darkpixel.rank.RankData;
 import com.darkpixel.rank.RankManager;
 import org.bukkit.Bukkit;
 import org.bukkit.Particle;
@@ -41,22 +42,39 @@ public class LoginMessageUtil implements Listener {
 
     @EventHandler
     public void onPlayerLogin(PlayerLoginEvent event) {
-        event.setResult(PlayerLoginEvent.Result.ALLOWED);
-        event.setKickMessage("");
+        Player player = event.getPlayer();
+        RankData data = rankManager.getAllRanks().getOrDefault(player.getUniqueId(), new RankData("member", 0));
+        long now = System.currentTimeMillis();
+        if (data.getBanUntil() > now || data.getBanUntil() == -1) {
+            String reason = data.getBanReason() != null ? data.getBanReason() : "未指定原因";
+            String kickMessage = "你已被封禁" + (data.getBanUntil() == -1 ? "永久" : "，剩余 " + ((data.getBanUntil() - now) / 60000) + " 分钟") + "\n原因：" + reason;
+            event.setResult(PlayerLoginEvent.Result.KICK_BANNED);
+            event.setKickMessage(kickMessage);
+        } else {
+            event.setResult(PlayerLoginEvent.Result.ALLOWED);
+            event.setKickMessage("");
+        }
     }
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         String playerName = player.getName();
+        String displayName = player.getDisplayName() != null ? player.getDisplayName() : playerName;
         String rank = rankManager.getRank(player);
         int score = rankManager.getScore(player);
         Particle particle = rankManager.getJoinParticle(player);
-        String joinMessage = rankManager.getJoinMessage(player);
+        String joinMessage = rankManager.getJoinMessage(player).replace("{player}", displayName);
         Global.executor.submit(() -> playerData.updatePlayer(player));
         int loginCount = playerData.getPlayerInfo(playerName).loginCount;
+
+        // 设置默认加入消息
         event.setJoinMessage("§7Lobby §8| §a" + playerName + " (" + rank + ") 欢迎第 " + loginCount + " 次加入黑像素服务器");
-        context.getPlugin().getServer().broadcastMessage(joinMessage);
+
+        // 使用 tellraw 发送酷炫欢迎消息
+        String tellrawCommand = "tellraw @a [{\"text\":\"§l§6欢迎 \",\"bold\":true},{\"text\":\"" + displayName + "\",\"color\":\"aqua\",\"bold\":true},{\"text\":\" §e加入服务器！\",\"bold\":true},{\"text\":\" (§b第 " + loginCount + " 次§e)\",\"color\":\"yellow\"}]";
+        Bukkit.dispatchCommand(Bukkit.getConsoleSender(), tellrawCommand);
+
         player.getWorld().spawnParticle(particle, player.getLocation(), 100);
         player.getWorld().playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.0f);
 

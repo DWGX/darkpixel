@@ -28,7 +28,6 @@ public class CommandManager implements CommandExecutor {
         this.banManager = new BanManager(context);
         JavaPlugin plugin = context.getPlugin();
 
-        // 注册所有命令并添加健壮性检查
         registerCommand(plugin, "aichat", new AiChatCommands(context.getAiChat(), context.getDashboard()));
         registerCommand(plugin, "giveblockablesword", this);
         registerCommand(plugin, "dashboard", context.getDashboard());
@@ -43,7 +42,7 @@ public class CommandManager implements CommandExecutor {
         registerCommand(plugin, "getswitchchest", context.getServerSwitchChest());
         registerCommand(plugin, "getradio", context.getServerRadioChest());
         registerCommand(plugin, "rank", new RankCommands(context.getRankManager()));
-        registerCommand(plugin, "darkban", this); // 修改为 darkban
+        registerCommand(plugin, "darkban", this);
     }
 
     private void registerCommand(JavaPlugin plugin, String commandName, CommandExecutor executor) {

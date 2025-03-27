@@ -7,10 +7,13 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
 
 import java.util.List;
+import java.util.Random;
 
 public class ChatListener implements Listener {
     private final PlayerData playerData;
     private final RankManager rankManager;
+    private final Random random = new Random();
+    private final String[] randomColors = {"§c", "§6", "§e", "§a", "§b", "§9", "§d"};
 
     public ChatListener(PlayerData playerData, RankManager rankManager) {
         this.playerData = playerData;
@@ -41,16 +44,41 @@ public class ChatListener implements Listener {
             }
             format.append("§r ");
         }
-        format.append(player.getName()).append("§r: ");
+        format.append(player.getDisplayName()).append("§r: ");
 
         String message = event.getMessage();
-        if ("rainbow".equals(rankManager.getChatColor(player))) {
-            StringBuilder rainbowMessage = new StringBuilder();
-            String[] colors = {"§c", "§6", "§e", "§a", "§b", "§9", "§d"};
-            for (int i = 0; i < message.length(); i++) {
-                rainbowMessage.append(colors[i % colors.length]).append(message.charAt(i));
-            }
-            message = rainbowMessage.toString();
+        String chatColor = rankManager.getChatColor(player);
+
+        switch (chatColor) {
+            case "rainbow":
+                StringBuilder rainbowMessage = new StringBuilder();
+                String[] colors = {"§c", "§6", "§e", "§a", "§b", "§9", "§d"};
+                for (int i = 0; i < message.length(); i++) {
+                    rainbowMessage.append(colors[i % colors.length]).append(message.charAt(i));
+                }
+                message = rainbowMessage.toString();
+                break;
+            case "random":
+                StringBuilder randomMessage = new StringBuilder();
+                for (int i = 0; i < message.length(); i++) {
+                    randomMessage.append(randomColors[random.nextInt(randomColors.length)]).append(message.charAt(i));
+                }
+                message = randomMessage.toString();
+                break;
+            case "gradient":
+                StringBuilder gradientMessage = new StringBuilder();
+                int length = message.length();
+                for (int i = 0; i < length; i++) {
+                    int colorIndex = (int) ((float) i / length * (randomColors.length - 1));
+                    gradientMessage.append(randomColors[colorIndex]).append(message.charAt(i));
+                }
+                message = gradientMessage.toString();
+                break;
+            case "normal":
+                break;
+            default:
+                message = chatColor + message;
+                break;
         }
 
         event.setFormat(format.toString() + message);

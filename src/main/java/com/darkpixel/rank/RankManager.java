@@ -131,6 +131,16 @@ public class RankManager {
                 data.setShowGroup(showGroup);
                 data.setBanUntil(banUntil);
                 data.setBanReason(banReason);
+                List<String> groups = new ArrayList<>();
+                try (PreparedStatement ps = conn.prepareStatement("SELECT group_name FROM player_groups WHERE uuid = ?")) {
+                    ps.setString(1, uuid.toString());
+                    ResultSet groupRs = ps.executeQuery();
+                    while (groupRs.next()) {
+                        groups.add(groupRs.getString("group_name"));
+                    }
+                }
+                if (groups.isEmpty()) groups.add("member");
+                data.setGroups(groups);
                 allRanks.put(uuid, data);
             }
         } catch (SQLException e) {
@@ -253,7 +263,7 @@ public class RankManager {
                         ps.setString(1, uuid.toString());
                         ps.setString(2, group);
                         ps.setString(3, playerName != null ? playerName : "");
-                        ps.executeUpdate(); // 改为逐条插入，避免批量插入导致的重复键问题
+                        ps.executeUpdate();
                     }
                 }
             } catch (SQLException e) {
