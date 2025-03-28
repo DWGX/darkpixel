@@ -12,7 +12,6 @@ import com.sun.net.httpserver.HttpServer;
 import org.bukkit.Bukkit;
 import org.bukkit.Particle;
 import org.bukkit.entity.Player;
-
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
@@ -38,7 +37,7 @@ public class RankServer implements Runnable {
         this.rankManager = rankManager;
         this.playerData = playerData;
         this.context = context;
-        this.port = context.getConfigManager().getConfig().getInt("http_port", 25567);
+        this.port = context.getConfigManager().getConfig().getInt("http_port", 25560);
         this.gson = new GsonBuilder()
                 .registerTypeAdapter(PlayerData.PlayerInfo.class, new PlayerInfoTypeAdapter())
                 .registerTypeAdapter(RankData.class, new RankDataTypeAdapter())
@@ -46,6 +45,7 @@ public class RankServer implements Runnable {
     }
 
     public void run() {
+        if (!context.isRankServerRunning()) return;
         try {
             server = HttpServer.create(new InetSocketAddress(port), 0);
             server.createContext("/api", new ApiHandler());

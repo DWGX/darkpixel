@@ -41,7 +41,7 @@ public class CommandManager implements CommandExecutor {
         registerCommand(plugin, "ping", this);
         registerCommand(plugin, "getswitchchest", context.getServerSwitchChest());
         registerCommand(plugin, "getradio", context.getServerRadioChest());
-        registerCommand(plugin, "rank", new RankCommands(context.getRankManager()));
+        registerCommand(plugin, "rank", new RankCommands(context)); // 修复：传入 context (Global)
         registerCommand(plugin, "darkban", this);
     }
 

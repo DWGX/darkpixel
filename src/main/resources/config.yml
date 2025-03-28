@@ -1,11 +1,12 @@
-#数据库
+# 数据库
 mysql:
   host: "localhost"
   port: 3306
   database: "darkpixel"
   username: "root"
   password: "dwgx0705"
-http_port: 25567
+http_port: 25560
+rank_server_url: "http://localhost:25560"
 
 # AI
 api_key: ""

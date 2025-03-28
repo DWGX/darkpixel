@@ -5,7 +5,6 @@ import org.bukkit.Bukkit;
 import org.bukkit.Particle;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
-
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -88,30 +87,57 @@ public class RankManager {
 
     public void setRank(Player player, String rank, int score, Particle particle, String joinMessage) {
         UUID uuid = player.getUniqueId();
-        RankData data = allRanks.getOrDefault(uuid, new RankData("member", 0));
-        data.rank = rank;
-        data.score = score;
-        data.setJoinParticle(particle);
-        data.setJoinMessage(joinMessage);
-        allRanks.put(uuid, data);
-        Global.executor.submit(() -> saveRankToDatabase(uuid, player.getName(), data));
+        if (context.isRankServerRunning()) {
+            RankData data = allRanks.getOrDefault(uuid, new RankData("member", 0));
+            data.rank = rank;
+            data.score = score;
+            data.setJoinParticle(particle);
+            data.setJoinMessage(joinMessage);
+            allRanks.put(uuid, data);
+            Global.executor.submit(() -> saveRankToDatabase(uuid, player.getName(), data));
+        } else {
+            context.getRankServerClient().setRank(uuid.toString(), rank);
+            RankData data = allRanks.getOrDefault(uuid, new RankData("member", 0));
+            data.rank = rank;
+            data.score = score;
+            data.setJoinParticle(particle);
+            data.setJoinMessage(joinMessage);
+            allRanks.put(uuid, data);
+        }
     }
 
     public void setRankByUUID(UUID uuid, String rank, int score, Particle particle, String joinMessage) {
-        RankData data = allRanks.getOrDefault(uuid, new RankData("member", 0));
-        data.rank = rank;
-        data.score = score;
-        data.setJoinParticle(particle);
-        data.setJoinMessage(joinMessage);
-        allRanks.put(uuid, data);
-        Global.executor.submit(() -> saveRankToDatabase(uuid, Bukkit.getOfflinePlayer(uuid).getName(), data));
+        if (context.isRankServerRunning()) {
+            RankData data = allRanks.getOrDefault(uuid, new RankData("member", 0));
+            data.rank = rank;
+            data.score = score;
+            data.setJoinParticle(particle);
+            data.setJoinMessage(joinMessage);
+            allRanks.put(uuid, data);
+            Global.executor.submit(() -> saveRankToDatabase(uuid, Bukkit.getOfflinePlayer(uuid).getName(), data));
+        } else {
+            context.getRankServerClient().setRank(uuid.toString(), rank);
+            RankData data = allRanks.getOrDefault(uuid, new RankData("member", 0));
+            data.rank = rank;
+            data.score = score;
+            data.setJoinParticle(particle);
+            data.setJoinMessage(joinMessage);
+            allRanks.put(uuid, data);
+        }
     }
 
     public void setScoreByUUID(UUID uuid, int score) {
-        RankData data = allRanks.getOrDefault(uuid, new RankData("member", 0));
-        data.score = score;
-        allRanks.put(uuid, data);
-        Global.executor.submit(() -> saveRankToDatabase(uuid, Bukkit.getOfflinePlayer(uuid).getName(), data));
+        if (context.isRankServerRunning()) {
+            RankData data = allRanks.getOrDefault(uuid, new RankData("member", 0));
+            data.score = score;
+            allRanks.put(uuid, data);
+            Global.executor.submit(() -> saveRankToDatabase(uuid, Bukkit.getOfflinePlayer(uuid).getName(), data));
+        } else {
+            context.getRankServerClient().setScore(uuid.toString(), score);
+            RankData data = allRanks.getOrDefault(uuid, new RankData("member", 0));
+            data.score = score;
+            allRanks.put(uuid, data);
+        }
     }
 
     private void saveRankToDatabase(UUID uuid, String playerName, RankData data) {
@@ -182,11 +208,21 @@ public class RankManager {
     }
 
     public void setGroup(Player player, String group) {
-        setPlayerGroups(player.getUniqueId(), Collections.singletonList(group));
+        if (context.isRankServerRunning()) {
+            setPlayerGroups(player.getUniqueId(), Collections.singletonList(group));
+        } else {
+            context.getRankServerClient().setGroup(player.getUniqueId().toString(), group);
+            setPlayerGroups(player.getUniqueId(), Collections.singletonList(group));
+        }
     }
 
     public void setGroupByUUID(UUID uuid, String group) {
-        setPlayerGroups(uuid, Collections.singletonList(group));
+        if (context.isRankServerRunning()) {
+            setPlayerGroups(uuid, Collections.singletonList(group));
+        } else {
+            context.getRankServerClient().setGroup(uuid.toString(), group);
+            setPlayerGroups(uuid, Collections.singletonList(group));
+        }
     }
 
     public void saveAll() {
@@ -194,7 +230,6 @@ public class RankManager {
             saveRankToDatabase(entry.getKey(), Bukkit.getOfflinePlayer(entry.getKey()).getName(), entry.getValue());
         }
     }
-
 
     public void reload() {
         playerGroups.clear();
@@ -207,6 +242,10 @@ public class RankManager {
         } catch (SQLException e) {
             e.printStackTrace();
         }
+    }
+
+    public void startSyncTask() {
+        Bukkit.getScheduler().runTaskTimer(context.getPlugin(), this::reload, 0L, 20L * 60L * 5L);
     }
 
     public Map<UUID, RankData> getAllRanks() {

@@ -8,7 +8,6 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.Particle;
 import org.jetbrains.annotations.NotNull;
-
 import java.io.File;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -68,7 +67,6 @@ public class PlayerData {
                 info.lastSignIn = lastSignIn;
                 info.effectsEnabled = effectsEnabled;
                 info.particle = particle != null ? Particle.valueOf(particle) : Particle.FIREWORK;
-
                 try (PreparedStatement ps = conn.prepareStatement("SELECT group_name FROM player_groups WHERE uuid = ?")) {
                     ps.setString(1, uuid);
                     ResultSet groupRs = ps.executeQuery();
@@ -77,7 +75,6 @@ public class PlayerData {
                     }
                 }
                 if (info.groups.isEmpty()) info.groups.add("member");
-
                 playerData.put(name, info);
             }
         } catch (SQLException e) {
@@ -115,7 +112,6 @@ public class PlayerData {
                 Player player = context.getPlugin().getServer().getPlayer(name);
                 String uuid = player != null ? player.getUniqueId().toString() :
                         context.getPlugin().getServer().getOfflinePlayer(name).getUniqueId().toString();
-
                 try (PreparedStatement ps = conn.prepareStatement(
                         "INSERT INTO players (uuid, name, loginCount, signInCount, x, y, z, world, lastSignIn, effectsEnabled, particle) " +
                                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE " +
@@ -143,7 +139,6 @@ public class PlayerData {
                     ps.setString(21, info.particle.name());
                     ps.executeUpdate();
                 }
-
                 try (PreparedStatement ps = conn.prepareStatement("DELETE FROM player_groups WHERE uuid = ?")) {
                     ps.setString(1, uuid);
                     ps.executeUpdate();
@@ -178,6 +173,17 @@ public class PlayerData {
             config.set(name + ".particle", info.particle.name());
         }
         FileUtil.saveAsync(config, file, context.getPlugin());
+    }
+
+    public void setBanStatus(String playerName, long banUntil, String reason) {
+        PlayerInfo info = getPlayerInfo(playerName);
+        info.groups.clear();
+        if (banUntil == 0) {
+            info.groups.add("member");
+        } else {
+            info.groups.add("banned");
+        }
+        saveData();
     }
 
     public int getSignInCount(Player player) {
@@ -225,11 +231,7 @@ public class PlayerData {
     }
 
     public void banPlayer(Player player, String reason) {
-        PlayerInfo info = getPlayerInfo(player.getName());
-        info.groups.clear();
-        info.groups.add("banned");
-        saveData();
-        player.kickPlayer("§c你已被封禁！原因: " + reason);
+        context.getBanManager().banPlayer(player.getName(), -1, reason);
     }
 
     public boolean isBanned(Player player) {

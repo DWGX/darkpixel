@@ -1,4 +1,4 @@
-const apiBase = "http://localhost:25567/api";
+const apiBase = "http://localhost:25560/api";
 const particles = ["FIREWORK", "FLAME", "HEART", "NOTE", "SMOKE", "VILLAGER_HAPPY"];
 const chatColors = ["normal", "§c", "§b", "§a", "§e", "§d", "rainbow", "random", "gradient"];
 let availableGroups = [];
@@ -70,7 +70,7 @@ function renderPlayers(players) {
         const card = document.createElement("div");
         card.className = "player-card";
         card.id = `player-${player.uuid}`;
-        card.style.animationDelay = `${index * 0.1}s`;
+        card.style.animationDelay = `${index * 0.05}s`; // 动画更快
         const currentGroup = player.groups && player.groups.length > 0 ? player.groups[0] : "member";
         card.innerHTML = `
             <div class="accordion">
@@ -81,75 +81,77 @@ function renderPlayers(players) {
                     (${player.online ? "在线" : "离线"})
                 </label>
                 <div class="accordion-content">
-                    <p>UUID: ${player.uuid}</p>
-                    <p>
-                        <label>积分:</label>
-                        <input type="number" value="${player.score}" id="score-${player.uuid}" class="input-field">
-                        <button onclick="setScore('${player.uuid}')" class="btn primary-btn"><i class="fas fa-check"></i></button>
-                        <span id="score-status-${player.uuid}" class="status"></span>
-                    </p>
-                    <p>
-                        <label>Rank:</label>
-                        <select id="rank-${player.uuid}" onchange="toggleCustomRank('${player.uuid}')" class="input-field">
-                            <option value="member" ${player.rank === "member" ? "selected" : ""}>Member</option>
-                            <option value="VIP" ${player.rank === "VIP" ? "selected" : ""}>VIP</option>
-                            <option value="SVIP" ${player.rank === "SVIP" ? "selected" : ""}>SVIP</option>
-                            <option value="VVIP" ${player.rank === "VVIP" ? "selected" : ""}>VVIP</option>
-                            <option value="UVIP" ${player.rank === "UVIP" ? "selected" : ""}>UVIP</option>
-                            <option value="EVIP" ${player.rank === "EVIP" ? "selected" : ""}>EVIP</option>
-                            <option value="custom" ${!["member", "VIP", "SVIP", "VVIP", "UVIP", "EVIP"].includes(player.rank) ? "selected" : ""}>自定义</option>
-                        </select>
-                        <input id="custom-rank-${player.uuid}" placeholder="输入自定义 Rank" value="${!["member", "VIP", "SVIP", "VVIP", "UVIP", "EVIP"].includes(player.rank) ? player.rank : ""}" class="input-field" style="display: ${player.rank === 'custom' || !["member", "VIP", "SVIP", "VVIP", "UVIP", "EVIP"].includes(player.rank) ? 'inline-block' : 'none'};">
-                        <button onclick="setRank('${player.uuid}')" class="btn primary-btn"><i class="fas fa-check"></i></button>
-                        <span id="rank-status-${player.uuid}" class="status"></span>
-                    </p>
-                    <p>
-                        <label>身份组:</label>
-                        <select id="group-${player.uuid}" class="input-field">
-                            ${availableGroups.map(g => `<option value="${g}" ${currentGroup === g ? "selected" : ""}>${g}</option>`).join("")}
-                        </select>
-                        <button onclick="setGroup('${player.uuid}')" class="btn primary-btn"><i class="fas fa-check"></i></button>
-                        <span id="group-status-${player.uuid}" class="status"></span>
-                    </p>
-                    <p>
-                        <label>进服粒子:</label>
-                        <select id="particle-${player.uuid}" class="input-field">
-                            ${particles.map(p => `<option value="${p}" ${p === player.join_particle ? "selected" : ""}>${p}</option>`).join("")}
-                        </select>
-                        <button onclick="setParticle('${player.uuid}')" class="btn primary-btn"><i class="fas fa-check"></i></button>
-                        <span id="particle-status-${player.uuid}" class="status"></span>
-                    </p>
-                    <p>
-                        <label>进服消息:</label>
-                        <input id="join-message-${player.uuid}" value="${player.join_message}" class="input-field">
-                        <button onclick="setJoinMessage('${player.uuid}')" class="btn primary-btn"><i class="fas fa-check"></i></button>
-                        <span id="join-message-status-${player.uuid}" class="status"></span>
-                    </p>
-                    <p>
-                        <label>发言颜色:</label>
-                        <select id="chat-color-${player.uuid}" class="input-field">
-                            ${chatColors.map(c => `<option value="${c}" ${c === player.chat_color ? "selected" : ""}>${c === "normal" ? "默认" : c === "rainbow" ? "彩虹" : c === "random" ? "随机" : c === "gradient" ? "渐变" : c}</option>`).join("")}
-                        </select>
-                        <button onclick="setChatColor('${player.uuid}')" class="btn primary-btn"><i class="fas fa-check"></i></button>
-                        <span id="chat-color-status-${player.uuid}" class="status"></span>
-                    </p>
-                    <p>
-                        <label>显示选项:</label>
-                        <span class="checkbox-group">
-                            <label><input type="checkbox" id="show-rank-${player.uuid}" ${player.show_rank ? "checked" : ""}> Rank</label>
-                            <label><input type="checkbox" id="show-vip-${player.uuid}" ${player.show_vip ? "checked" : ""}> VIP</label>
-                            <label><input type="checkbox" id="show-group-${player.uuid}" ${player.show_group ? "checked" : ""}> 身份组</label>
-                        </span>
-                        <button onclick="setDisplayOptions('${player.uuid}')" class="btn primary-btn"><i class="fas fa-check"></i></button>
-                        <span id="display-options-status-${player.uuid}" class="status"></span>
-                    </p>
-                    <p>封禁状态: ${player.ban_until === 0 ? "未封禁" : player.ban_until === -1 ? "永久封禁" : new Date(player.ban_until).toLocaleString()}</p>
-                    <p>封禁原因: ${player.ban_reason || "无"}</p>
-                    <p>
-                        <button onclick="banPlayer('${player.uuid}')" class="btn danger-btn"><i class="fas fa-ban"></i> 封禁</button>
-                        <button onclick="unbanPlayer('${player.uuid}')" class="btn success-btn"><i class="fas fa-unlock"></i> 解封</button>
-                        <span id="ban-status-${player.uuid}" class="status"></span>
-                    </p>
+                    <div class="scroll-content">
+                        <p>UUID: ${player.uuid}</p>
+                        <p>
+                            <label>积分:</label>
+                            <input type="number" value="${player.score}" id="score-${player.uuid}" class="input-field">
+                            <button onclick="setScore('${player.uuid}')" class="btn primary-btn"><i class="fas fa-check"></i></button>
+                            <span id="score-status-${player.uuid}" class="status"></span>
+                        </p>
+                        <p>
+                            <label>Rank:</label>
+                            <select id="rank-${player.uuid}" onchange="toggleCustomRank('${player.uuid}')" class="input-field">
+                                <option value="member" ${player.rank === "member" ? "selected" : ""}>Member</option>
+                                <option value="VIP" ${player.rank === "VIP" ? "selected" : ""}>VIP</option>
+                                <option value="SVIP" ${player.rank === "SVIP" ? "selected" : ""}>SVIP</option>
+                                <option value="VVIP" ${player.rank === "VVIP" ? "selected" : ""}>VVIP</option>
+                                <option value="UVIP" ${player.rank === "UVIP" ? "selected" : ""}>UVIP</option>
+                                <option value="EVIP" ${player.rank === "EVIP" ? "selected" : ""}>EVIP</option>
+                                <option value="custom" ${!["member", "VIP", "SVIP", "VVIP", "UVIP", "EVIP"].includes(player.rank) ? "selected" : ""}>自定义</option>
+                            </select>
+                            <input id="custom-rank-${player.uuid}" placeholder="输入自定义 Rank" value="${!["member", "VIP", "SVIP", "VVIP", "UVIP", "EVIP"].includes(player.rank) ? player.rank : ""}" class="input-field" style="display: ${player.rank === 'custom' || !["member", "VIP", "SVIP", "VVIP", "UVIP", "EVIP"].includes(player.rank) ? 'inline-block' : 'none'};">
+                            <button onclick="setRank('${player.uuid}')" class="btn primary-btn"><i class="fas fa-check"></i></button>
+                            <span id="rank-status-${player.uuid}" class="status"></span>
+                        </p>
+                        <p>
+                            <label>身份组:</label>
+                            <select id="group-${player.uuid}" class="input-field">
+                                ${availableGroups.map(g => `<option value="${g}" ${currentGroup === g ? "selected" : ""}>${g}</option>`).join("")}
+                            </select>
+                            <button onclick="setGroup('${player.uuid}')" class="btn primary-btn"><i class="fas fa-check"></i></button>
+                            <span id="group-status-${player.uuid}" class="status"></span>
+                        </p>
+                        <p>
+                            <label>进服粒子:</label>
+                            <select id="particle-${player.uuid}" class="input-field">
+                                ${particles.map(p => `<option value="${p}" ${p === player.join_particle ? "selected" : ""}>${p}</option>`).join("")}
+                            </select>
+                            <button onclick="setParticle('${player.uuid}')" class="btn primary-btn"><i class="fas fa-check"></i></button>
+                            <span id="particle-status-${player.uuid}" class="status"></span>
+                        </p>
+                        <p>
+                            <label>进服消息:</label>
+                            <input id="join-message-${player.uuid}" value="${player.join_message}" class="input-field">
+                            <button onclick="setJoinMessage('${player.uuid}')" class="btn primary-btn"><i class="fas fa-check"></i></button>
+                            <span id="join-message-status-${player.uuid}" class="status"></span>
+                        </p>
+                        <p>
+                            <label>发言颜色:</label>
+                            <select id="chat-color-${player.uuid}" class="input-field">
+                                ${chatColors.map(c => `<option value="${c}" ${c === player.chat_color ? "selected" : ""}>${c === "normal" ? "默认" : c === "rainbow" ? "彩虹" : c === "random" ? "随机" : c === "gradient" ? "渐变" : c}</option>`).join("")}
+                            </select>
+                            <button onclick="setChatColor('${player.uuid}')" class="btn primary-btn"><i class="fas fa-check"></i></button>
+                            <span id="chat-color-status-${player.uuid}" class="status"></span>
+                        </p>
+                        <p>
+                            <label>显示选项:</label>
+                            <span class="checkbox-group">
+                                <label><input type="checkbox" id="show-rank-${player.uuid}" ${player.show_rank ? "checked" : ""}> Rank</label>
+                                <label><input type="checkbox" id="show-vip-${player.uuid}" ${player.show_vip ? "checked" : ""}> VIP</label>
+                                <label><input type="checkbox" id="show-group-${player.uuid}" ${player.show_group ? "checked" : ""}> 身份组</label>
+                            </span>
+                            <button onclick="setDisplayOptions('${player.uuid}')" class="btn primary-btn"><i class="fas fa-check"></i></button>
+                            <span id="display-options-status-${player.uuid}" class="status"></span>
+                        </p>
+                        <p>封禁状态: ${player.ban_until === 0 ? "未封禁" : player.ban_until === -1 ? "永久封禁" : new Date(player.ban_until).toLocaleString()}</p>
+                        <p>封禁原因: ${player.ban_reason || "无"}</p>
+                        <p>
+                            <button onclick="banPlayer('${player.uuid}')" class="btn danger-btn"><i class="fas fa-ban"></i> 封禁</button>
+                            <button onclick="unbanPlayer('${player.uuid}')" class="btn success-btn"><i class="fas fa-unlock"></i> 解封</button>
+                            <span id="ban-status-${player.uuid}" class="status"></span>
+                        </p>
+                    </div>
                 </div>
             </div>
         `;
@@ -188,7 +190,7 @@ function showStatus(elementId, message, isError = false) {
     const status = document.getElementById(elementId);
     status.textContent = message;
     status.classList.add("active", isError ? "error" : "success");
-    setTimeout(() => status.classList.remove("active", isError ? "error" : "success"), 3000);
+    setTimeout(() => status.classList.remove("active", isError ? "error" : "success"), 2000); // 缩短提示时间
 }
 
 function setScore(uuid) {

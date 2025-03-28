@@ -1,12 +1,9 @@
 package com.darkpixel;
 
-import com.darkpixel.rank.RankServer;
 import com.darkpixel.utils.LogUtil;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.plugin.java.JavaPlugin;
-
-import java.util.concurrent.TimeUnit;
 
 public final class Main extends JavaPlugin {
     private Global context;
@@ -19,11 +16,13 @@ public final class Main extends JavaPlugin {
             getLogger().info("正在初始化 LogUtil...");
             context = new Global(this);
             getLogger().info("Global 初始化完成");
-
-            rankServerThread = new Thread(context.getRankServer(), "RankServer-Thread");
-            rankServerThread.start();
-            getLogger().info("RankServer 线程已启动");
-
+            if (context.isRankServerRunning()) {
+                rankServerThread = new Thread(context.getRankServer(), "RankServer-Thread");
+                rankServerThread.start();
+                getLogger().info("RankServer 线程已启动");
+            } else {
+                getLogger().info("检测到端口已被占用，切换为客户端模式同步数据");
+            }
             getLogger().info("DarkPixel v1.0 已成功启用");
         } catch (Exception e) {
             getLogger().severe("DarkPixel 初始化失败: " + e.getMessage());
@@ -35,19 +34,14 @@ public final class Main extends JavaPlugin {
     @Override
     public void onDisable() {
         try {
-            // 保存 RankManager 数据
             if (context != null && context.getRankManager() != null) {
                 context.getRankManager().saveAll();
                 getLogger().info("RankManager 数据已保存");
-            } else {
-                getLogger().warning("RankManager 未初始化，跳过保存");
             }
-
-            // 关闭 RankServer
-            if (context != null && context.getRankServer() != null) {
+            if (context != null && context.isRankServerRunning() && context.getRankServer() != null) {
                 context.getRankServer().shutdown();
                 try {
-                    rankServerThread.join(5000); // 等待线程优雅关闭
+                    rankServerThread.join(5000);
                     if (rankServerThread.isAlive()) {
                         getLogger().warning("RankServer 线程未能及时关闭，可能存在资源泄漏");
                     } else {
@@ -57,16 +51,11 @@ public final class Main extends JavaPlugin {
                     getLogger().severe("等待 RankServer 线程关闭时被中断: " + e.getMessage());
                     Thread.currentThread().interrupt();
                 }
-            } else {
-                getLogger().warning("RankServer 未初始化，跳过关闭");
             }
-
-            // 清理 Global 资源
             if (context != null) {
                 context.shutdown();
                 getLogger().info("Global 资源已清理");
             }
-
             getLogger().info("DarkPixel v1.0 已成功禁用");
         } catch (Exception e) {
             getLogger().severe("DarkPixel 禁用过程中出错: " + e.getMessage());

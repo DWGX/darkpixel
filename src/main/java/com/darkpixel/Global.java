@@ -24,13 +24,16 @@ import com.darkpixel.utils.LoginMessageUtil;
 import com.darkpixel.utils.MotdUtils;
 import com.darkpixel.utils.PlayerData;
 import com.darkpixel.utils.PlayerFreeze;
+import com.darkpixel.utils.RankServerClient;
 import com.darkpixel.utils.SitUtils;
 import com.darkpixel.utils.WorldData;
 import com.darkpixel.utils.effects.PlayerJoinEffects;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.event.HandlerList;
 import org.bukkit.plugin.java.JavaPlugin;
-
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.nio.channels.ServerSocketChannel;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -61,6 +64,8 @@ public class Global {
     private final SignInContainer signInContainer;
     private final RankServer rankServer;
     private final BanManager banManager;
+    private final RankServerClient rankServerClient;
+    private final boolean isRankServerRunning;
 
     public static final ExecutorService executor = new ThreadPoolExecutor(
             Runtime.getRuntime().availableProcessors(),
@@ -93,18 +98,33 @@ public class Global {
         this.sitUtils = configManager.getConfig().getBoolean("sitting.enabled", true) ? new SitUtils(this) : null;
         this.antiCheatHandler = new AntiCheatHandler(this);
         this.signInContainer = new SignInContainer(this, rankManager);
-        this.rankServer = new RankServer(rankManager, playerData, this);
         this.banManager = new BanManager(this);
-
+        this.rankServer = new RankServer(rankManager, playerData, this);
+        this.isRankServerRunning = checkPortAvailability();
+        this.rankServerClient = new RankServerClient(configManager.getConfig().getString("rank_server_url", "http://localhost:" + configManager.getConfig().getInt("http_port", 25560)), this);
         new CommandManager(this);
         registerEvents();
         executor.submit(() -> configManager.reloadAllConfigsAsync());
+        rankManager.startSyncTask();
+        if (!isRankServerRunning) {
+            executor.submit(() -> rankServerClient.syncAllPlayers());
+        }
+    }
+
+    private boolean checkPortAvailability() {
+        int port = configManager.getConfig().getInt("http_port", 25560);
+        try (ServerSocketChannel serverSocket = ServerSocketChannel.open()) {
+            serverSocket.bind(new InetSocketAddress(port));
+            return true;
+        } catch (IOException e) {
+            return false;
+        }
     }
 
     private void registerEvents() {
         plugin.getServer().getPluginManager().registerEvents(new ChatListener(playerData, rankManager), plugin);
         plugin.getServer().getPluginManager().registerEvents(new PlayerJoinEffects(playerData), plugin);
-        plugin.getCommand("rank").setExecutor(new RankCommands(rankManager));
+        plugin.getCommand("rank").setExecutor(new RankCommands(this));
         if (bringBackBlocking != null && configManager.getConfig().getBoolean("enable_bring_back_blocking", true)) {
             plugin.getServer().getPluginManager().registerEvents(bringBackBlocking, plugin);
         }
@@ -125,11 +145,12 @@ public class Global {
 
     public void shutdown() {
         HandlerList.unregisterAll(plugin);
-
-        if (rankServer != null) {
+        if (isRankServerRunning && rankServer != null) {
             rankServer.shutdown();
         }
-
+        if (rankServerClient != null) {
+            rankServerClient.shutdown();
+        }
         if (!executor.isShutdown()) {
             executor.shutdown();
             try {
@@ -145,11 +166,9 @@ public class Global {
                 Thread.currentThread().interrupt();
             }
         }
-
         if (playerData != null) {
             playerData.saveData();
         }
-
         if (rankManager != null) {
             rankManager.saveAll();
         }
@@ -247,6 +266,14 @@ public class Global {
 
     public BanManager getBanManager() {
         return banManager;
+    }
+
+    public RankServerClient getRankServerClient() {
+        return rankServerClient;
+    }
+
+    public boolean isRankServerRunning() {
+        return isRankServerRunning;
     }
 
     public YamlConfiguration getConfig() {
