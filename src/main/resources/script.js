@@ -4,61 +4,58 @@ const chatColors = ["normal", "§c", "§b", "§a", "§e", "§d", "rainbow", "ran
 let availableGroups = [];
 let allPlayers = [];
 
-function fetchPlayers() {
-    fetch(`${apiBase}/list_players`)
-        .then(res => res.json())
-        .then(data => {
-            const status = document.getElementById("status");
-            status.textContent = data.status === "success" ? "在线" : "离线";
-            status.classList.toggle("online", data.status === "success");
-            status.classList.toggle("offline", data.status !== "success");
-            allPlayers = data.players || [];
-            renderPlayers(allPlayers);
-        })
-        .catch(err => {
-            const status = document.getElementById("status");
-            status.textContent = "离线 (连接失败)";
-            status.classList.add("offline");
-            console.error("请求失败:", err);
-            renderPlayers([]);
-        });
+async function fetchPlayers() {
+    try {
+        const res = await fetch(`${apiBase}/list_players?page=1&pageSize=100`, { cache: "no-store" });
+        const data = await res.json();
+        const status = document.getElementById("status");
+        status.textContent = data.status === "success" ? "在线" : "离线";
+        status.classList.toggle("online", data.status === "success");
+        status.classList.toggle("offline", data.status !== "success");
+        allPlayers = data.players || [];
+        renderPlayers(allPlayers);
+    } catch (err) {
+        const status = document.getElementById("status");
+        status.textContent = "离线 (连接失败)";
+        status.classList.add("offline");
+        console.error(err);
+        renderPlayers([]);
+    }
 }
 
-function fetchGroups() {
-    fetch(`${apiBase}/list_groups`)
-        .then(res => res.json())
-        .then(data => {
-            if (data.status === "success") {
-                availableGroups = data.groups.map(g => g.name);
-                renderPlayers(allPlayers);
-                const groupList = document.getElementById("group-list");
-                groupList.innerHTML = "";
-                data.groups.forEach(group => {
-                    fetch(`${apiBase}/get_group_members?group=${group.name}`)
-                        .then(res => res.json())
-                        .then(membersData => {
-                            const members = membersData.members || [];
-                            const div = document.createElement("div");
-                            div.className = "group-item";
-                            div.innerHTML = `
-                                <span style="color: ${group.color}">[${group.prefix || group.name}] ${group.name}</span>
-                                <button onclick="deleteGroup('${group.name}')" class="btn danger-btn"><i class="fas fa-trash"></i></button>
-                                <div class="group-members">
-                                    ${members.map(member => `
-                                        <div class="member">
-                                            <img src="https://minotar.net/avatar/${member.name}/32" alt="${member.name}" class="member-avatar">
-                                            <span>${member.name}</span>
-                                        </div>
-                                    `).join("")}
-                                </div>
-                            `;
-                            groupList.appendChild(div);
-                        })
-                        .catch(err => console.error(`获取 ${group.name} 成员失败:`, err));
-                });
+async function fetchGroups() {
+    try {
+        const res = await fetch(`${apiBase}/list_groups`);
+        const data = await res.json();
+        if (data.status === "success") {
+            availableGroups = data.groups.map(g => g.name);
+            const groupList = document.getElementById("group-list");
+            groupList.innerHTML = "";
+            for (const group of data.groups) {
+                const membersRes = await fetch(`${apiBase}/get_group_members?group=${group.name}`);
+                const membersData = await membersRes.json();
+                const members = membersData.members || [];
+                const div = document.createElement("div");
+                div.className = "group-item";
+                div.innerHTML = `
+                    <span style="color: ${group.color}">[${group.prefix || group.name}] ${group.name}</span>
+                    <button onclick="deleteGroup('${group.name}')" class="btn danger-btn"><i class="fas fa-trash"></i></button>
+                    <div class="group-members">
+                        ${members.map(member => `
+                            <div class="member">
+                                <img src="https://minotar.net/avatar/${member.name}/32" alt="${member.name}" class="member-avatar">
+                                <span>${member.name}</span>
+                            </div>
+                        `).join("")}
+                    </div>
+                `;
+                groupList.appendChild(div);
             }
-        })
-        .catch(err => console.error("获取身份组失败:", err));
+            renderPlayers(allPlayers);
+        }
+    } catch (err) {
+        console.error(err);
+    }
 }
 
 function renderPlayers(players) {
@@ -70,7 +67,7 @@ function renderPlayers(players) {
         const card = document.createElement("div");
         card.className = "player-card";
         card.id = `player-${player.uuid}`;
-        card.style.animationDelay = `${index * 0.05}s`; // 动画更快
+        card.style.animationDelay = `${index * 0.03}s`;
         const currentGroup = player.groups && player.groups.length > 0 ? player.groups[0] : "member";
         card.innerHTML = `
             <div class="accordion">
@@ -85,7 +82,7 @@ function renderPlayers(players) {
                         <p>UUID: ${player.uuid}</p>
                         <p>
                             <label>积分:</label>
-                            <input type="number" value="${player.score}" id="score-${player.uuid}" class="input-field">
+                            <input type="number" value="${player.score}" id="score-${player.uuid}" class="input-field" min="0">
                             <button onclick="setScore('${player.uuid}')" class="btn primary-btn"><i class="fas fa-check"></i></button>
                             <span id="score-status-${player.uuid}" class="status"></span>
                         </p>
@@ -156,18 +153,13 @@ function renderPlayers(players) {
             </div>
         `;
         playerList.appendChild(card);
-        const toggle = document.getElementById(`toggle-${player.uuid}`);
-        toggle.addEventListener("change", () => {
+        document.getElementById(`toggle-${player.uuid}`).addEventListener("change", () => {
             const expanded = JSON.parse(localStorage.getItem("expandedPlayers") || "[]");
-            if (toggle.checked) {
-                if (!expanded.includes(player.uuid)) {
-                    expanded.push(player.uuid);
-                }
+            if (document.getElementById(`toggle-${player.uuid}`).checked) {
+                if (!expanded.includes(player.uuid)) expanded.push(player.uuid);
             } else {
                 const index = expanded.indexOf(player.uuid);
-                if (index > -1) {
-                    expanded.splice(index, 1);
-                }
+                if (index > -1) expanded.splice(index, 1);
             }
             localStorage.setItem("expandedPlayers", JSON.stringify(expanded));
         });
@@ -190,148 +182,166 @@ function showStatus(elementId, message, isError = false) {
     const status = document.getElementById(elementId);
     status.textContent = message;
     status.classList.add("active", isError ? "error" : "success");
-    setTimeout(() => status.classList.remove("active", isError ? "error" : "success"), 2000); // 缩短提示时间
+    setTimeout(() => status.classList.remove("active", isError ? "error" : "success"), 1500);
 }
 
-function setScore(uuid) {
+async function setScore(uuid) {
     const score = document.getElementById(`score-${uuid}`).value;
-    fetch(`${apiBase}/set_score?player=${uuid}&score=${score}`)
-        .then(() => {
-            showStatus(`score-status-${uuid}`, "设置成功");
-            fetchPlayers();
-        })
-        .catch(err => showStatus(`score-status-${uuid}`, "设置失败", true));
+    if (score < 0) return showStatus(`score-status-${uuid}`, "积分不能为负", true);
+    try {
+        await fetch(`${apiBase}/set_score?player=${uuid}&score=${score}`);
+        showStatus(`score-status-${uuid}`, "设置成功");
+        fetchPlayers();
+    } catch (err) {
+        showStatus(`score-status-${uuid}`, "设置失败", true);
+    }
 }
 
-function setRank(uuid) {
+async function setRank(uuid) {
     const rank = document.getElementById(`rank-${uuid}`).value === "custom" ?
-        document.getElementById(`custom-rank-${uuid}`).value :
+        document.getElementById(`custom-rank-${uuid}`).value.trim() :
         document.getElementById(`rank-${uuid}`).value;
-    if (rank) {
-        fetch(`${apiBase}/set_rank?player=${uuid}&rank=${rank}`)
-            .then(() => {
-                showStatus(`rank-status-${uuid}`, "设置成功");
-                fetchPlayers();
-            })
-            .catch(err => showStatus(`rank-status-${uuid}`, "设置失败", true));
+    if (!rank) return showStatus(`rank-status-${uuid}`, "Rank 不能为空", true);
+    try {
+        await fetch(`${apiBase}/set_rank?player=${uuid}&rank=${encodeURIComponent(rank)}`);
+        showStatus(`rank-status-${uuid}`, "设置成功");
+        fetchPlayers();
+    } catch (err) {
+        showStatus(`rank-status-${uuid}`, "设置失败", true);
     }
 }
 
-function setGroup(uuid) {
+async function setGroup(uuid) {
     const group = document.getElementById(`group-${uuid}`).value;
-    if (group) {
-        fetch(`${apiBase}/set_group?player=${uuid}&group=${group}`)
-            .then(() => {
-                showStatus(`group-status-${uuid}`, "设置成功");
-                fetchPlayers();
-            })
-            .catch(err => showStatus(`group-status-${uuid}`, "设置失败", true));
+    try {
+        await fetch(`${apiBase}/set_group?player=${uuid}&group=${group}`);
+        showStatus(`group-status-${uuid}`, "设置成功");
+        fetchPlayers();
+    } catch (err) {
+        showStatus(`group-status-${uuid}`, "设置失败", true);
     }
 }
 
-function setParticle(uuid) {
+async function setParticle(uuid) {
     const particle = document.getElementById(`particle-${uuid}`).value;
-    fetch(`${apiBase}/set_particle?player=${uuid}&particle=${particle}`)
-        .then(() => {
-            showStatus(`particle-status-${uuid}`, "设置成功");
-            fetchPlayers();
-        })
-        .catch(err => showStatus(`particle-status-${uuid}`, "设置失败", true));
+    try {
+        await fetch(`${apiBase}/set_particle?player=${uuid}&particle=${particle}`);
+        showStatus(`particle-status-${uuid}`, "设置成功");
+        fetchPlayers();
+    } catch (err) {
+        showStatus(`particle-status-${uuid}`, "设置失败", true);
+    }
 }
 
-function setJoinMessage(uuid) {
-    const message = document.getElementById(`join-message-${uuid}`).value;
-    fetch(`${apiBase}/set_join_message?player=${uuid}&message=${message}`)
-        .then(() => {
-            showStatus(`join-message-status-${uuid}`, "设置成功");
-            fetchPlayers();
-        })
-        .catch(err => showStatus(`join-message-status-${uuid}`, "设置失败", true));
+async function setJoinMessage(uuid) {
+    const message = document.getElementById(`join-message-${uuid}`).value.trim();
+    if (!message) return showStatus(`join-message-status-${uuid}`, "消息不能为空", true);
+    try {
+        await fetch(`${apiBase}/set_join_message?player=${uuid}&message=${encodeURIComponent(message)}`);
+        showStatus(`join-message-status-${uuid}`, "设置成功");
+        fetchPlayers();
+    } catch (err) {
+        showStatus(`join-message-status-${uuid}`, "设置失败", true);
+    }
 }
 
-function setChatColor(uuid) {
+async function setChatColor(uuid) {
     const chatColor = document.getElementById(`chat-color-${uuid}`).value;
-    fetch(`${apiBase}/set_chat_color?player=${uuid}&chat_color=${chatColor}`)
-        .then(() => {
-            showStatus(`chat-color-status-${uuid}`, "设置成功");
-            fetchPlayers();
-        })
-        .catch(err => showStatus(`chat-color-status-${uuid}`, "设置失败", true));
+    try {
+        await fetch(`${apiBase}/set_chat_color?player=${uuid}&chat_color=${chatColor}`);
+        showStatus(`chat-color-status-${uuid}`, "设置成功");
+        fetchPlayers();
+    } catch (err) {
+        showStatus(`chat-color-status-${uuid}`, "设置失败", true);
+    }
 }
 
-function setDisplayOptions(uuid) {
+async function setDisplayOptions(uuid) {
     const showRank = document.getElementById(`show-rank-${uuid}`).checked;
     const showVip = document.getElementById(`show-vip-${uuid}`).checked;
     const showGroup = document.getElementById(`show-group-${uuid}`).checked;
-    fetch(`${apiBase}/set_display_options?player=${uuid}&show_rank=${showRank}&show_vip=${showVip}&show_group=${showGroup}`)
-        .then(() => {
-            showStatus(`display-options-status-${uuid}`, "设置成功");
-            fetchPlayers();
-        })
-        .catch(err => showStatus(`display-options-status-${uuid}`, "设置失败", true));
+    try {
+        await fetch(`${apiBase}/set_display_options?player=${uuid}&show_rank=${showRank}&show_vip=${showVip}&show_group=${showGroup}`);
+        showStatus(`display-options-status-${uuid}`, "设置成功");
+        fetchPlayers();
+    } catch (err) {
+        showStatus(`display-options-status-${uuid}`, "设置失败", true);
+    }
 }
 
-function banPlayer(uuid) {
+async function banPlayer(uuid) {
     const time = prompt("封禁时间(分钟，-1为永久):", "0");
-    if (time === null) return;
-    const reason = prompt("封禁原因:", "未指定原因");
-    if (reason === null) return;
-    fetch(`${apiBase}/ban?player=${uuid}&banTime=${time}&reason=${reason}`)
-        .then(() => {
-            showStatus(`ban-status-${uuid}`, "封禁成功");
-            fetchPlayers();
-        })
-        .catch(err => showStatus(`ban-status-${uuid}`, "封禁失败", true));
+    if (time === null || isNaN(time)) return;
+    const reason = prompt("封禁原因:", "未指定原因") || "未指定原因";
+    try {
+        await fetch(`${apiBase}/ban?player=${uuid}&banTime=${time}&reason=${encodeURIComponent(reason)}`);
+        showStatus(`ban-status-${uuid}`, "封禁成功");
+        fetchPlayers();
+    } catch (err) {
+        showStatus(`ban-status-${uuid}`, "封禁失败", true);
+    }
 }
 
-function unbanPlayer(uuid) {
-    fetch(`${apiBase}/unban?player=${uuid}`)
-        .then(() => {
-            showStatus(`ban-status-${uuid}`, "解封成功");
-            fetchPlayers();
-        })
-        .catch(err => showStatus(`ban-status-${uuid}`, "解封失败", true));
+async function unbanPlayer(uuid) {
+    try {
+        await fetch(`${apiBase}/unban?player=${uuid}`);
+        showStatus(`ban-status-${uuid}`, "解封成功");
+        fetchPlayers();
+    } catch (err) {
+        showStatus(`ban-status-${uuid}`, "解封失败", true);
+    }
 }
 
-function createGroup() {
-    const name = document.getElementById("group-name").value;
+async function createGroup() {
+    const name = document.getElementById("group-name").value.trim();
+    if (!name) return alert("组名不能为空");
     const color = document.getElementById("group-color").value || "§f";
     const emoji = document.getElementById("group-emoji").value;
     const badge = document.getElementById("group-badge").value;
-    const prefix = document.getElementById("group-prefix").value;
-    if (name) {
-        fetch(`${apiBase}/create_group?name=${name}&color=${color}&emoji=${emoji}&badge=${badge}&prefix=${prefix}`)
-            .then(() => {
-                fetchGroups();
-                document.getElementById("group-name").value = "";
-                document.getElementById("group-color").value = "";
-                document.getElementById("group-emoji").value = "";
-                document.getElementById("group-badge").value = "";
-                document.getElementById("group-prefix").value = "";
-            })
-            .catch(err => console.error("创建身份组失败:", err));
+    const prefix = document.getElementById("group-prefix").value || `[${name}]`;
+    try {
+        await fetch(`${apiBase}/create_group?name=${encodeURIComponent(name)}&color=${encodeURIComponent(color)}&emoji=${encodeURIComponent(emoji)}&badge=${encodeURIComponent(badge)}&prefix=${encodeURIComponent(prefix)}`);
+        fetchGroups();
+        document.getElementById("group-name").value = "";
+        document.getElementById("group-color").value = "";
+        document.getElementById("group-emoji").value = "";
+        document.getElementById("group-badge").value = "";
+        document.getElementById("group-prefix").value = "";
+    } catch (err) {
+        console.error(err);
+        alert("创建身份组失败");
     }
 }
 
-function deleteGroup(name) {
-    if (confirm(`确定删除身份组 ${name} 吗？`)) {
-        fetch(`${apiBase}/delete_group?name=${name}`)
-            .then(() => fetchGroups())
-            .catch(err => console.error("删除身份组失败:", err));
+async function deleteGroup(name) {
+    if (!confirm(`确定删除身份组 ${name} 吗？`)) return;
+    try {
+        await fetch(`${apiBase}/delete_group?name=${encodeURIComponent(name)}`);
+        fetchGroups();
+    } catch (err) {
+        console.error(err);
+        alert("删除身份组失败");
     }
 }
 
-document.getElementById("search-input").addEventListener("input", searchPlayers);
-
+document.getElementById("search-input").addEventListener("input", debounce(searchPlayers, 300));
 document.getElementById("refresh-btn").addEventListener("click", () => {
     fetchPlayers();
     fetchGroups();
 });
 
+function debounce(func, wait) {
+    let timeout;
+    return function (...args) {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(this, args), wait);
+    };
+}
+
 setInterval(() => {
     fetchPlayers();
     fetchGroups();
-}, 10000);
+}, 5000);
 
 fetchPlayers();
 fetchGroups();

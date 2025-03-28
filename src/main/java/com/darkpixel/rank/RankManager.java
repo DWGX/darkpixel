@@ -38,7 +38,8 @@ public class RankManager {
 
     private void loadGroups() throws SQLException {
         try (Connection conn = getConnection();
-             ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM `groups`")) {
+             PreparedStatement ps = conn.prepareStatement("SELECT * FROM `groups`");
+             ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
                 groups.put(rs.getString("name"), new RankGroup(rs.getString("name"), rs.getString("color"), rs.getString("emoji"), rs.getString("badge"), rs.getString("prefix")));
             }
@@ -50,7 +51,8 @@ public class RankManager {
 
     private void loadPlayerGroups() throws SQLException {
         try (Connection conn = getConnection();
-             ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM player_groups")) {
+             PreparedStatement ps = conn.prepareStatement("SELECT * FROM player_groups");
+             ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
                 UUID uuid = UUID.fromString(rs.getString("uuid"));
                 playerGroups.computeIfAbsent(uuid, k -> new ArrayList<>()).add(rs.getString("group_name"));
@@ -60,7 +62,8 @@ public class RankManager {
 
     private void loadAllRanks() throws SQLException {
         try (Connection conn = getConnection();
-             ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM players")) {
+             PreparedStatement ps = conn.prepareStatement("SELECT * FROM players");
+             ResultSet rs = ps.executeQuery()) {
             while (rs.next()) {
                 UUID uuid = UUID.fromString(rs.getString("uuid"));
                 RankData data = new RankData(rs.getString("rank") != null ? rs.getString("rank") : "member", rs.getInt("score"));
@@ -73,9 +76,9 @@ public class RankManager {
                 data.setBanUntil(rs.getLong("ban_until"));
                 data.setBanReason(rs.getString("ban_reason"));
                 List<String> groups = new ArrayList<>();
-                try (PreparedStatement ps = conn.prepareStatement("SELECT group_name FROM player_groups WHERE uuid = ?")) {
-                    ps.setString(1, uuid.toString());
-                    ResultSet groupRs = ps.executeQuery();
+                try (PreparedStatement groupPs = conn.prepareStatement("SELECT group_name FROM player_groups WHERE uuid = ?")) {
+                    groupPs.setString(1, uuid.toString());
+                    ResultSet groupRs = groupPs.executeQuery();
                     while (groupRs.next()) {
                         groups.add(groupRs.getString("group_name"));
                     }
@@ -88,116 +91,42 @@ public class RankManager {
 
     public void setRank(Player player, String rank, int score, Particle particle, String joinMessage) {
         UUID uuid = player.getUniqueId();
-        if (context.isRankServerRunning()) {
-            RankData data = allRanks.getOrDefault(uuid, new RankData("member", 0));
-            data.rank = rank;
-            data.score = score;
-            data.setJoinParticle(particle);
-            data.setJoinMessage(joinMessage);
-            allRanks.put(uuid, data);
-            Global.executor.submit(() -> saveRankToDatabase(uuid, player.getName(), data));
-        } else {
-            context.getRankServerClient().setRank(uuid.toString(), rank);
-            RankData data = allRanks.getOrDefault(uuid, new RankData("member", 0));
-            data.rank = rank;
-            data.score = score;
-            data.setJoinParticle(particle);
-            data.setJoinMessage(joinMessage);
-            allRanks.put(uuid, data);
-        }
+        RankData data = allRanks.getOrDefault(uuid, new RankData("member", 0));
+        data.setRank(rank);
+        data.setScore(score);
+        data.setJoinParticle(particle);
+        data.setJoinMessage(joinMessage);
+        allRanks.put(uuid, data);
+        Global.executor.submit(() -> saveRankToDatabaseBatch(Collections.singletonMap(uuid, data)));
     }
 
     public void setRankByUUID(UUID uuid, String rank, int score, Particle particle, String joinMessage) {
-        if (context.isRankServerRunning()) {
-            RankData data = allRanks.getOrDefault(uuid, new RankData("member", 0));
-            data.rank = rank;
-            data.score = score;
-            data.setJoinParticle(particle);
-            data.setJoinMessage(joinMessage);
-            allRanks.put(uuid, data);
-            Global.executor.submit(() -> saveRankToDatabase(uuid, Bukkit.getOfflinePlayer(uuid).getName(), data));
-        } else {
-            context.getRankServerClient().setRank(uuid.toString(), rank);
-            RankData data = allRanks.getOrDefault(uuid, new RankData("member", 0));
-            data.rank = rank;
-            data.score = score;
-            data.setJoinParticle(particle);
-            data.setJoinMessage(joinMessage);
-            allRanks.put(uuid, data);
-        }
+        RankData data = allRanks.getOrDefault(uuid, new RankData("member", 0));
+        data.setRank(rank);
+        data.setScore(score);
+        data.setJoinParticle(particle);
+        data.setJoinMessage(joinMessage);
+        allRanks.put(uuid, data);
+        Global.executor.submit(() -> saveRankToDatabaseBatch(Collections.singletonMap(uuid, data)));
     }
 
     public void setScoreByUUID(UUID uuid, int score) {
-        if (context.isRankServerRunning()) {
-            RankData data = allRanks.getOrDefault(uuid, new RankData("member", 0));
-            data.score = score;
-            allRanks.put(uuid, data);
-            Global.executor.submit(() -> saveRankToDatabase(uuid, Bukkit.getOfflinePlayer(uuid).getName(), data));
-        } else {
-            context.getRankServerClient().setScore(uuid.toString(), score);
-            RankData data = allRanks.getOrDefault(uuid, new RankData("member", 0));
-            data.score = score;
-            allRanks.put(uuid, data);
-        }
+        RankData data = allRanks.getOrDefault(uuid, new RankData("member", 0));
+        data.setScore(score);
+        allRanks.put(uuid, data);
+        Global.executor.submit(() -> saveRankToDatabaseBatch(Collections.singletonMap(uuid, data)));
     }
 
-    private void saveRankToDatabase(UUID uuid, String playerName, RankData data) {
-        try (Connection conn = getConnection();
-             PreparedStatement ps = conn.prepareStatement(
-                     "INSERT INTO players (uuid, name, `rank`, score, join_particle, join_message, chat_color, show_rank, show_vip, show_group, ban_until, ban_reason, loginCount, signInCount, lastSignIn, x, y, z, world, effects_enabled, particle) " +
-                             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE " +
-                             "`rank` = ?, score = ?, join_particle = ?, join_message = ?, chat_color = ?, show_rank = ?, show_vip = ?, show_group = ?, ban_until = ?, ban_reason = ?, loginCount = ?, signInCount = ?, lastSignIn = ?, x = ?, y = ?, z = ?, world = ?, effects_enabled = ?, particle = ?")) {
-            com.darkpixel.utils.PlayerData.PlayerInfo info = context.getPlayerData().getPlayerInfo(playerName);
-            int loginCount = info.loginCount;
-            int signInCount = info.signInCount;
-            long lastSignIn = info.lastSignIn;
-            Location loc = info.location != null ? info.location : new Location(Bukkit.getWorld("world"), 0, 0, 0);
-            ps.setString(1, uuid.toString());
-            ps.setString(2, playerName);
-            ps.setString(3, data.getRank());
-            ps.setInt(4, data.getScore());
-            ps.setString(5, data.getJoinParticle().name());
-            ps.setString(6, data.getJoinMessage());
-            ps.setString(7, data.getChatColor());
-            ps.setBoolean(8, data.isShowRank());
-            ps.setBoolean(9, data.isShowVip());
-            ps.setBoolean(10, data.isShowGroup());
-            ps.setLong(11, data.getBanUntil());
-            ps.setString(12, data.getBanReason());
-            ps.setInt(13, loginCount);
-            ps.setInt(14, signInCount);
-            ps.setLong(15, lastSignIn);
-            ps.setDouble(16, loc.getX());
-            ps.setDouble(17, loc.getY());
-            ps.setDouble(18, loc.getZ());
-            ps.setString(19, loc.getWorld().getName());
-            ps.setBoolean(20, info.effects_enabled);
-            ps.setString(21, info.particle.name());
-            ps.setString(22, data.getRank());
-            ps.setInt(23, data.getScore());
-            ps.setString(24, data.getJoinParticle().name());
-            ps.setString(25, data.getJoinMessage());
-            ps.setString(26, data.getChatColor());
-            ps.setBoolean(27, data.isShowRank());
-            ps.setBoolean(28, data.isShowVip());
-            ps.setBoolean(29, data.isShowGroup());
-            ps.setLong(30, data.getBanUntil());
-            ps.setString(31, data.getBanReason());
-            ps.setInt(32, loginCount);
-            ps.setInt(33, signInCount);
-            ps.setLong(34, lastSignIn);
-            ps.setDouble(35, loc.getX());
-            ps.setDouble(36, loc.getY());
-            ps.setDouble(37, loc.getZ());
-            ps.setString(38, loc.getWorld().getName());
-            ps.setBoolean(39, info.effects_enabled);
-            ps.setString(40, info.particle.name());
-            ps.executeUpdate();
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
+    public void setGroup(Player player, String group) {
+        UUID uuid = player.getUniqueId();
+        setPlayerGroups(uuid, Collections.singletonList(group));
     }
-    public void setPlayerGroups(UUID uuid, List<String> newGroups) {
+
+    public void setGroupByUUID(UUID uuid, String group) {
+        setPlayerGroups(uuid, Collections.singletonList(group));
+    }
+
+    private void setPlayerGroups(UUID uuid, List<String> newGroups) {
         List<String> validGroups = new ArrayList<>();
         for (String group : newGroups) {
             if (groups.containsKey(group)) validGroups.add(group);
@@ -206,49 +135,94 @@ public class RankManager {
         playerGroups.put(uuid, validGroups);
         Global.executor.submit(() -> {
             try (Connection conn = getConnection()) {
-                String playerName = Bukkit.getOfflinePlayer(uuid).getName();
-                if (playerName != null) {
-                    try (PreparedStatement ps = conn.prepareStatement("DELETE FROM player_groups WHERE uuid = ?")) {
+                try (PreparedStatement ps = conn.prepareStatement("DELETE FROM player_groups WHERE uuid = ?")) {
+                    ps.setString(1, uuid.toString());
+                    ps.executeUpdate();
+                }
+                try (PreparedStatement ps = conn.prepareStatement("INSERT INTO player_groups (uuid, group_name, player_name) VALUES (?, ?, ?)")) {
+                    String playerName = Bukkit.getOfflinePlayer(uuid).getName();
+                    for (String group : validGroups) {
                         ps.setString(1, uuid.toString());
-                        ps.executeUpdate();
+                        ps.setString(2, group);
+                        ps.setString(3, playerName);
+                        ps.addBatch();
                     }
-                    try (PreparedStatement ps = conn.prepareStatement("INSERT INTO player_groups (uuid, group_name, player_name) VALUES (?, ?, ?)")) {
-                        for (String group : validGroups) {
-                            ps.setString(1, uuid.toString());
-                            ps.setString(2, group);
-                            ps.setString(3, playerName);
-                            ps.executeUpdate();
-                        }
-                    }
+                    ps.executeBatch();
                 }
             } catch (SQLException e) {
+                Bukkit.getLogger().severe("Failed to save player groups: " + e.getMessage());
                 e.printStackTrace();
             }
         });
     }
 
-    public void setGroup(Player player, String group) {
-        if (context.isRankServerRunning()) {
-            setPlayerGroups(player.getUniqueId(), Collections.singletonList(group));
-        } else {
-            context.getRankServerClient().setGroup(player.getUniqueId().toString(), group);
-            setPlayerGroups(player.getUniqueId(), Collections.singletonList(group));
-        }
-    }
+    private void saveRankToDatabaseBatch(Map<UUID, RankData> ranks) {
+        try (Connection conn = getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "INSERT INTO players (uuid, name, `rank`, score, join_particle, join_message, chat_color, show_rank, show_vip, show_group, ban_until, ban_reason, login_count, signin_count, last_signin, x, y, z, world, effects_enabled, particle) " +
+                             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE " +
+                             "`rank` = ?, score = ?, join_particle = ?, join_message = ?, chat_color = ?, show_rank = ?, show_vip = ?, show_group = ?, ban_until = ?, ban_reason = ?, login_count = ?, signin_count = ?, last_signin = ?, x = ?, y = ?, z = ?, world = ?, effects_enabled = ?, particle = ?")) {
+            for (Map.Entry<UUID, RankData> entry : ranks.entrySet()) {
+                UUID uuid = entry.getKey();
+                RankData data = entry.getValue();
+                String playerName = Bukkit.getOfflinePlayer(uuid).getName();
+                com.darkpixel.utils.PlayerData.PlayerInfo info = context.getPlayerData().getPlayerInfo(playerName);
+                int loginCount = info.loginCount;
+                int signInCount = info.signInCount;
+                long lastSignIn = info.lastSignIn;
+                Location loc = info.location != null ? info.location : new Location(Bukkit.getWorld("world"), 0, 0, 0);
 
-    public void setGroupByUUID(UUID uuid, String group) {
-        if (context.isRankServerRunning()) {
-            setPlayerGroups(uuid, Collections.singletonList(group));
-        } else {
-            context.getRankServerClient().setGroup(uuid.toString(), group);
-            setPlayerGroups(uuid, Collections.singletonList(group));
+                ps.setString(1, uuid.toString());
+                ps.setString(2, playerName);
+                ps.setString(3, data.getRank());
+                ps.setInt(4, data.getScore());
+                ps.setString(5, data.getJoinParticle().name());
+                ps.setString(6, data.getJoinMessage());
+                ps.setString(7, data.getChatColor());
+                ps.setBoolean(8, data.isShowRank());
+                ps.setBoolean(9, data.isShowVip());
+                ps.setBoolean(10, data.isShowGroup());
+                ps.setLong(11, data.getBanUntil());
+                ps.setString(12, data.getBanReason());
+                ps.setInt(13, loginCount);
+                ps.setInt(14, signInCount);
+                ps.setLong(15, lastSignIn);
+                ps.setDouble(16, loc.getX());
+                ps.setDouble(17, loc.getY());
+                ps.setDouble(18, loc.getZ());
+                ps.setString(19, loc.getWorld().getName());
+                ps.setBoolean(20, info.effects_enabled);
+                ps.setString(21, info.particle.name());
+                ps.setString(22, data.getRank());
+                ps.setInt(23, data.getScore());
+                ps.setString(24, data.getJoinParticle().name());
+                ps.setString(25, data.getJoinMessage());
+                ps.setString(26, data.getChatColor());
+                ps.setBoolean(27, data.isShowRank());
+                ps.setBoolean(28, data.isShowVip());
+                ps.setBoolean(29, data.isShowGroup());
+                ps.setLong(30, data.getBanUntil());
+                ps.setString(31, data.getBanReason());
+                ps.setInt(32, loginCount);
+                ps.setInt(33, signInCount);
+                ps.setLong(34, lastSignIn);
+                ps.setDouble(35, loc.getX());
+                ps.setDouble(36, loc.getY());
+                ps.setDouble(37, loc.getZ());
+                ps.setString(38, loc.getWorld().getName());
+                ps.setBoolean(39, info.effects_enabled);
+                ps.setString(40, info.particle.name());
+                ps.addBatch();
+            }
+            ps.executeBatch();
+        } catch (SQLException e) {
+            Bukkit.getLogger().severe("Failed to save ranks to database: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
     public void saveAll() {
-        for (Map.Entry<UUID, RankData> entry : allRanks.entrySet()) {
-            saveRankToDatabase(entry.getKey(), Bukkit.getOfflinePlayer(entry.getKey()).getName(), entry.getValue());
-        }
+        Global.executor.submit(() -> saveRankToDatabaseBatch(allRanks));
     }
 
     public void reload() {
@@ -260,6 +234,7 @@ public class RankManager {
             loadPlayerGroups();
             loadAllRanks();
         } catch (SQLException e) {
+            Bukkit.getLogger().severe("Failed to reload rank data: " + e.getMessage());
             e.printStackTrace();
         }
     }
@@ -277,7 +252,7 @@ public class RankManager {
     }
 
     public List<String> getPlayerGroups(Player player) {
-        return playerGroups.getOrDefault(player != null ? player.getUniqueId() : UUID.randomUUID(), Collections.singletonList("member"));
+        return playerGroups.getOrDefault(player.getUniqueId(), Collections.singletonList("member"));
     }
 
     public String getRank(Player player) {

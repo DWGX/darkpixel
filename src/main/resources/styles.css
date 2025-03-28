@@ -9,7 +9,7 @@ body {
     background: linear-gradient(135deg, #1a1a1a, #2c2c2c);
     color: #e0e0e0;
     min-height: 100vh;
-    padding: 15px; /* 缩小整体边距 */
+    padding: 15px;
     overflow-x: hidden;
 }
 
@@ -22,17 +22,17 @@ body {
 .server-status {
     display: flex;
     align-items: center;
-    gap: 8px; /* 缩小间距 */
+    gap: 8px;
     padding: 10px;
     background: rgba(44, 44, 44, 0.9);
     border-radius: 8px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
     margin-bottom: 15px;
-    transition: all 0.2s ease; /* 动画更快 */
+    transition: all 0.2s ease;
 }
 
 .server-status:hover {
-    transform: translateY(-1px); /* 缩小悬浮偏移 */
+    transform: translateY(-1px);
 }
 
 .status-indicator {
@@ -73,7 +73,7 @@ body {
     outline: none;
     background: #444;
     box-shadow: 0 0 8px rgba(0, 122, 255, 0.5);
-    transform: scale(1.01); /* 缩小缩放效果 */
+    transform: scale(1.01);
 }
 
 .search-bar::after {
@@ -89,8 +89,8 @@ body {
 
 .player-list {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); /* 卡牌略窄 */
-    gap: 15px; /* 缩小间距 */
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 15px;
     margin-bottom: 30px;
 }
 
@@ -101,11 +101,11 @@ body {
     box-shadow: 0 6px 15px rgba(0, 0, 0, 0.4);
     transition: all 0.2s ease;
     overflow: hidden;
-    animation: slideIn 0.3s ease forwards; /* 动画更快 */
+    animation: slideIn 0.3s ease forwards;
 }
 
 .player-card:hover {
-    transform: translateY(-3px) scale(1.01); /* 缩小悬浮效果 */
+    transform: translateY(-3px) scale(1.01);
 }
 
 .no-data {
@@ -154,19 +154,19 @@ body {
     opacity: 0;
     padding: 0 12px;
     overflow: hidden;
-    transition: all 0.3s ease; /* 动画更快 */
+    transition: all 0.3s ease;
 }
 
 .accordion-toggle:checked + .accordion-header + .accordion-content {
-    max-height: 300px; /* 限制展开高度 */
+    max-height: 300px;
     opacity: 1;
     padding: 12px;
 }
 
 .scroll-content {
-    max-height: 280px; /* 内部滚动区域 */
-    overflow-y: auto; /* 添加滚动条 */
-    padding-right: 5px; /* 避免内容被滚动条遮挡 */
+    max-height: 280px;
+    overflow-y: auto;
+    padding-right: 5px;
 }
 
 .scroll-content::-webkit-scrollbar {
@@ -183,7 +183,7 @@ body {
 }
 
 .player-card p {
-    margin: 8px 0; /* 缩小间距 */
+    margin: 8px 0;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -203,7 +203,7 @@ body {
 }
 
 .btn {
-    padding: 6px 12px; /* 按钮更小 */
+    padding: 6px 12px;
     border: none;
     border-radius: 6px;
     font-size: 0.85rem;
@@ -243,7 +243,7 @@ body {
 }
 
 .btn:active {
-    transform: scale(0.98); /* 更轻微的点击效果 */
+    transform: scale(0.98);
 }
 
 .checkbox-group {
@@ -329,7 +329,7 @@ select.input-field:hover {
 }
 
 .member-avatar {
-    width: 28px; /* 头像稍小 */
+    width: 28px;
     height: 28px;
     border-radius: 50%;
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
@@ -343,7 +343,7 @@ select.input-field:hover {
 
 .group-form .input-field {
     flex: 1;
-    min-width: 100px; /* 更人性化 */
+    min-width: 100px;
 }
 
 .status {
@@ -386,6 +386,6 @@ select.input-field:hover {
 }
 
 @keyframes slideIn {
-    from { transform: translateY(15px); opacity: 0; } /* 起始偏移更小 */
+    from { transform: translateY(15px); opacity: 0; }
     to { transform: translateY(0); opacity: 1; }
 }

@@ -65,6 +65,7 @@ public class Global {
     private final RankServer rankServer;
     private final BanManager banManager;
     private final RankServerClient rankServerClient;
+    private final ChatListener chatListener;
     private final boolean isRankServerRunning;
 
     public static final ExecutorService executor = new ThreadPoolExecutor(
@@ -100,6 +101,7 @@ public class Global {
         this.signInContainer = new SignInContainer(this, rankManager);
         this.banManager = new BanManager(this);
         this.rankServer = new RankServer(rankManager, playerData, this);
+        this.chatListener = new ChatListener(playerData, rankManager);
         this.isRankServerRunning = checkPortAvailability();
         this.rankServerClient = new RankServerClient(configManager.getConfig().getString("rank_server_url", "http://localhost:" + configManager.getConfig().getInt("http_port", 25560)), this);
         new CommandManager(this);
@@ -122,7 +124,7 @@ public class Global {
     }
 
     private void registerEvents() {
-        plugin.getServer().getPluginManager().registerEvents(new ChatListener(playerData, rankManager), plugin);
+        plugin.getServer().getPluginManager().registerEvents(chatListener, plugin);
         plugin.getServer().getPluginManager().registerEvents(new PlayerJoinEffects(playerData), plugin);
         plugin.getCommand("rank").setExecutor(new RankCommands(this));
         if (bringBackBlocking != null && configManager.getConfig().getBoolean("enable_bring_back_blocking", true)) {
@@ -270,6 +272,10 @@ public class Global {
 
     public RankServerClient getRankServerClient() {
         return rankServerClient;
+    }
+
+    public ChatListener getChatListener() {
+        return chatListener;
     }
 
     public boolean isRankServerRunning() {
