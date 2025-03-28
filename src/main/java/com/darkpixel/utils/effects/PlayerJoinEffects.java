@@ -18,7 +18,7 @@ public class PlayerJoinEffects implements Listener {
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         PlayerData.PlayerInfo info = playerData.getPlayerInfo(player.getName());
-        if (info.effectsEnabled) {
+        if (info.effects_enabled) {
             player.getWorld().spawnParticle(info.particle, player.getLocation(), 100);
             player.getWorld().playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.0f);
             String broadcast = "§e" + player.getName() + " §a加入了服务器 (§b" + String.join(", ", info.groups) + "§a)";

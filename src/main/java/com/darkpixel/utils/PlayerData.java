@@ -15,11 +15,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Collection;
+import java.util.*;
 import java.util.stream.Collectors;
 
 public class PlayerData {
@@ -60,12 +56,12 @@ public class PlayerData {
                 double z = rs.getDouble("z");
                 String world = rs.getString("world");
                 long lastSignIn = rs.getLong("lastSignIn");
-                boolean effectsEnabled = rs.getBoolean("effectsEnabled");
+                boolean effects_enabled = rs.getBoolean("effects_enabled");
                 String particle = rs.getString("particle");
                 PlayerInfo info = new PlayerInfo(loginCount, new Location(context.getPlugin().getServer().getWorld(world), x, y, z));
                 info.signInCount = signInCount;
                 info.lastSignIn = lastSignIn;
-                info.effectsEnabled = effectsEnabled;
+                info.effects_enabled = effects_enabled;
                 info.particle = particle != null ? Particle.valueOf(particle) : Particle.FIREWORK;
                 try (PreparedStatement ps = conn.prepareStatement("SELECT group_name FROM player_groups WHERE uuid = ?")) {
                     ps.setString(1, uuid);
@@ -92,12 +88,12 @@ public class PlayerData {
             double z = config.getDouble(key + ".z", 0);
             String world = config.getString(key + ".world", "world");
             long lastSignIn = config.getLong(key + ".lastSignIn", 0L);
-            boolean effectsEnabled = config.getBoolean(key + ".effectsEnabled", true);
+            boolean effects_enabled = config.getBoolean(key + ".effects_enabled", true);
             String particle = config.getString(key + ".particle", "FIREWORK");
             PlayerInfo info = new PlayerInfo(loginCount, new Location(context.getPlugin().getServer().getWorld(world), x, y, z));
             info.signInCount = signInCount;
             info.lastSignIn = lastSignIn;
-            info.effectsEnabled = effectsEnabled;
+            info.effects_enabled = effects_enabled;
             info.particle = Particle.valueOf(particle);
             if (info.groups.isEmpty()) info.groups.add("member");
             playerData.put(key, info);
@@ -106,16 +102,19 @@ public class PlayerData {
 
     public void saveData() {
         try (Connection conn = getConnection()) {
+            conn.setAutoCommit(false); // 开启事务
             for (Map.Entry<String, PlayerInfo> entry : playerData.entrySet()) {
                 String name = entry.getKey();
                 PlayerInfo info = entry.getValue();
                 Player player = context.getPlugin().getServer().getPlayer(name);
                 String uuid = player != null ? player.getUniqueId().toString() :
                         context.getPlugin().getServer().getOfflinePlayer(name).getUniqueId().toString();
+
+                // 保存玩家基本信息
                 try (PreparedStatement ps = conn.prepareStatement(
-                        "INSERT INTO players (uuid, name, loginCount, signInCount, x, y, z, world, lastSignIn, effectsEnabled, particle) " +
+                        "INSERT INTO players (uuid, name, loginCount, signInCount, x, y, z, world, lastSignIn, effects_enabled, particle) " +
                                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE " +
-                                "name = ?, loginCount = ?, signInCount = ?, x = ?, y = ?, z = ?, world = ?, lastSignIn = ?, effectsEnabled = ?, particle = ?")) {
+                                "name = ?, loginCount = ?, signInCount = ?, x = ?, y = ?, z = ?, world = ?, lastSignIn = ?, effects_enabled = ?, particle = ?")) {
                     ps.setString(1, uuid);
                     ps.setString(2, name);
                     ps.setInt(3, info.loginCount);
@@ -125,7 +124,7 @@ public class PlayerData {
                     ps.setDouble(7, info.location.getZ());
                     ps.setString(8, info.location.getWorld().getName());
                     ps.setLong(9, info.lastSignIn);
-                    ps.setBoolean(10, info.effectsEnabled);
+                    ps.setBoolean(10, info.effects_enabled);
                     ps.setString(11, info.particle.name());
                     ps.setString(12, name);
                     ps.setInt(13, info.loginCount);
@@ -135,26 +134,39 @@ public class PlayerData {
                     ps.setDouble(17, info.location.getZ());
                     ps.setString(18, info.location.getWorld().getName());
                     ps.setLong(19, info.lastSignIn);
-                    ps.setBoolean(20, info.effectsEnabled);
+                    ps.setBoolean(20, info.effects_enabled);
                     ps.setString(21, info.particle.name());
                     ps.executeUpdate();
                 }
+
+                // 删除旧的组记录
                 try (PreparedStatement ps = conn.prepareStatement("DELETE FROM player_groups WHERE uuid = ?")) {
                     ps.setString(1, uuid);
                     ps.executeUpdate();
                 }
-                for (String group : info.groups) {
-                    try (PreparedStatement ps = conn.prepareStatement("INSERT INTO player_groups (uuid, player_name, group_name) VALUES (?, ?, ?)")) {
+
+                // 使用 Set 去重并插入组记录
+                Set<String> uniqueGroups = new HashSet<>(info.groups); // 去重
+                try (PreparedStatement ps = conn.prepareStatement(
+                        "INSERT IGNORE INTO player_groups (uuid, player_name, group_name) VALUES (?, ?, ?)")) {
+                    for (String group : uniqueGroups) {
                         ps.setString(1, uuid);
                         ps.setString(2, name);
                         ps.setString(3, group);
-                        ps.executeUpdate();
+                        ps.addBatch(); // 使用批量插入
                     }
+                    ps.executeBatch(); // 执行批量插入
                 }
             }
+            conn.commit(); // 提交事务
         } catch (SQLException e) {
             context.getPlugin().getLogger().severe("保存玩家数据失败: " + e.getMessage());
-            saveDataAsync();
+            try (Connection conn = getConnection()) {
+                conn.rollback(); // 回滚事务
+            } catch (SQLException rollbackEx) {
+                context.getPlugin().getLogger().severe("回滚事务失败: " + rollbackEx.getMessage());
+            }
+            saveDataAsync(); // 失败时保存到 YAML
         }
     }
 
@@ -169,7 +181,7 @@ public class PlayerData {
             config.set(name + ".z", info.location.getZ());
             config.set(name + ".world", info.location.getWorld().getName());
             config.set(name + ".lastSignIn", info.lastSignIn);
-            config.set(name + ".effectsEnabled", info.effectsEnabled);
+            config.set(name + ".effects_enabled", info.effects_enabled);
             config.set(name + ".particle", info.particle.name());
         }
         FileUtil.saveAsync(config, file, context.getPlugin());
@@ -205,7 +217,10 @@ public class PlayerData {
         info.foodLevel = player.getFoodLevel();
         info.inventoryContents = player.getInventory().getContents();
         info.effects = player.getActivePotionEffects();
-        if (info.groups.isEmpty()) info.groups.add("member");
+        if (info.groups.isEmpty()) {
+            info.groups.clear(); // 清空后再添加，避免重复
+            info.groups.add("member");
+        }
         playerData.put(name, info);
         saveData();
     }
@@ -216,8 +231,8 @@ public class PlayerData {
         return info;
     }
 
-    public boolean isEffectsEnabled(Player player) {
-        return getPlayerInfo(player.getName()).effectsEnabled;
+    public boolean iseffects_enabled(Player player) {
+        return getPlayerInfo(player.getName()).effects_enabled;
     }
 
     public void setParticle(Player player, Particle particle) {
@@ -248,7 +263,7 @@ public class PlayerData {
         public @NotNull Collection<PotionEffect> effects;
         public long lastSignIn;
         public List<String> groups;
-        public boolean effectsEnabled;
+        public boolean effects_enabled;
         public Particle particle;
 
         public PlayerInfo(int loginCount, Location location) {
@@ -261,7 +276,7 @@ public class PlayerData {
             this.effects = new ArrayList<PotionEffect>();
             this.lastSignIn = 0L;
             this.groups = new ArrayList<>();
-            this.effectsEnabled = true;
+            this.effects_enabled = true;
             this.particle = Particle.FIREWORK;
         }
 

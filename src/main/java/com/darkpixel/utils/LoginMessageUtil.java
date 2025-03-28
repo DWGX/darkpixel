@@ -5,6 +5,8 @@ import com.darkpixel.ai.AiChatHandler;
 import com.darkpixel.manager.ConfigManager;
 import com.darkpixel.rank.RankData;
 import com.darkpixel.rank.RankManager;
+import org.bukkit.BanEntry;
+import org.bukkit.BanList;
 import org.bukkit.Bukkit;
 import org.bukkit.Particle;
 import org.bukkit.Sound;
@@ -38,22 +40,42 @@ public class LoginMessageUtil implements Listener {
         this.rankManager = context.getRankManager();
         this.configManager = context.getConfigManager();
         context.getPlugin().getCommand("toggleaiwelcome").setExecutor(new ToggleAiWelcomeCommand(this.context));
+        // 注册事件监听器
+        context.getPlugin().getServer().getPluginManager().registerEvents(this, context.getPlugin());
     }
 
     @EventHandler
     public void onPlayerLogin(PlayerLoginEvent event) {
         Player player = event.getPlayer();
-        RankData data = rankManager.getAllRanks().getOrDefault(player.getUniqueId(), new RankData("member", 0));
+        String playerName = player.getName();
+        UUID uuid = player.getUniqueId();
+
+        // 检查 Bukkit BanList
+        BanEntry banEntry = Bukkit.getBanList(BanList.Type.NAME).getBanEntry(playerName);
+        if (banEntry != null) {
+            long banUntil = banEntry.getExpiration() == null ? -1 : banEntry.getExpiration().getTime();
+            if (banUntil == -1 || banUntil > System.currentTimeMillis()) {
+                String reason = banEntry.getReason() != null ? banEntry.getReason() : "未指定原因";
+                String kickMessage = "你已被封禁" + (banUntil == -1 ? "永久" : "，剩余 " + ((banUntil - System.currentTimeMillis()) / 60000) + " 分钟") + "\n原因：" + reason;
+                event.disallow(PlayerLoginEvent.Result.KICK_BANNED, kickMessage);
+                context.getPlugin().getLogger().info(playerName + " 尝试登录但被封禁，原因：" + reason);
+                return;
+            }
+        }
+
+        // 检查 RankData（备用检查，确保与数据库一致）
+        RankData data = rankManager.getAllRanks().getOrDefault(uuid, new RankData("member", 0));
         long now = System.currentTimeMillis();
         if (data.getBanUntil() > now || data.getBanUntil() == -1) {
             String reason = data.getBanReason() != null ? data.getBanReason() : "未指定原因";
             String kickMessage = "你已被封禁" + (data.getBanUntil() == -1 ? "永久" : "，剩余 " + ((data.getBanUntil() - now) / 60000) + " 分钟") + "\n原因：" + reason;
-            event.setResult(PlayerLoginEvent.Result.KICK_BANNED);
-            event.setKickMessage(kickMessage);
-        } else {
-            event.setResult(PlayerLoginEvent.Result.ALLOWED);
-            event.setKickMessage("");
+            event.disallow(PlayerLoginEvent.Result.KICK_BANNED, kickMessage);
+            context.getPlugin().getLogger().info(playerName + " 尝试登录但被封禁，原因：" + reason);
+            return;
         }
+
+        // 允许登录
+        event.allow();
     }
 
     @EventHandler
@@ -78,20 +100,20 @@ public class LoginMessageUtil implements Listener {
         player.getWorld().spawnParticle(particle, player.getLocation(), 100);
         player.getWorld().playSound(player.getLocation(), Sound.ENTITY_PLAYER_LEVELUP, 1.0f, 1.0f);
 
+        // 处理 OP 和 OldCombatMechanics 指令
         new BukkitRunnable() {
             @Override
             public void run() {
                 if (!player.isOnline()) return;
+
                 List<String> groups = rankManager.getPlayerGroups(player);
                 boolean shouldBeOp = groups.contains("op") || Bukkit.getOperators().stream().anyMatch(op -> op.getUniqueId().equals(player.getUniqueId()));
-                if (shouldBeOp && !player.isOp()) {
+
+                // 如果玩家不应该是 OP，临时赋予 OP 并执行指令
+                if (!shouldBeOp && !player.isOp()) {
                     Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "op " + playerName);
-                    player.sendMessage("§a已授予你 OP 权限！");
-                }
-                boolean wasOp = player.isOp();
-                if (!wasOp) Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "op " + playerName);
-                player.performCommand("oldcombatmechanics mode old");
-                if (!shouldBeOp) {
+                    player.performCommand("oldcombatmechanics mode old");
+                    // 立即移除 OP 权限
                     new BukkitRunnable() {
                         @Override
                         public void run() {
@@ -99,11 +121,20 @@ public class LoginMessageUtil implements Listener {
                                 Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "deop " + playerName);
                             }
                         }
-                    }.runTaskLater(configManager.getPlugin(), 10L);
+                    }.runTaskLater(context.getPlugin(), 5L); // 缩短延迟到 5 tick
+                } else if (shouldBeOp && !player.isOp()) {
+                    // 如果玩家应该是 OP，永久赋予
+                    Bukkit.dispatchCommand(Bukkit.getConsoleSender(), "op " + playerName);
+                    player.sendMessage("§a已授予你 OP 权限！");
+                    player.performCommand("oldcombatmechanics mode old");
+                } else if (player.isOp()) {
+                    // 如果玩家已经是 OP，直接执行指令
+                    player.performCommand("oldcombatmechanics mode old");
                 }
             }
-        }.runTaskLater(configManager.getPlugin(), 20L);
+        }.runTaskLater(context.getPlugin(), 20L);
 
+        // AI 欢迎消息
         boolean aiWelcomeEnabled = configManager.getConfig().getBoolean("ai_welcome_enabled", true);
         if (aiWelcomeEnabled && (System.currentTimeMillis() - lastAiWelcome.getOrDefault(player.getUniqueId(), 0L)) >= configManager.getAiWelcomeInterval()) {
             new BukkitRunnable() {

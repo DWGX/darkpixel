@@ -2,6 +2,7 @@ package com.darkpixel.rank;
 
 import com.darkpixel.Global;
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import org.bukkit.Particle;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
@@ -143,10 +144,14 @@ public class RankManager {
     private void saveRankToDatabase(UUID uuid, String playerName, RankData data) {
         try (Connection conn = getConnection();
              PreparedStatement ps = conn.prepareStatement(
-                     "INSERT INTO players (uuid, name, `rank`, score, join_particle, join_message, chat_color, show_rank, show_vip, show_group, ban_until, ban_reason, loginCount) " +
-                             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE " +
-                             "`rank` = ?, score = ?, join_particle = ?, join_message = ?, chat_color = ?, show_rank = ?, show_vip = ?, show_group = ?, ban_until = ?, ban_reason = ?, loginCount = ?")) {
-            int loginCount = context.getPlayerData().getPlayerInfo(playerName).loginCount;
+                     "INSERT INTO players (uuid, name, `rank`, score, join_particle, join_message, chat_color, show_rank, show_vip, show_group, ban_until, ban_reason, loginCount, signInCount, lastSignIn, x, y, z, world, effects_enabled, particle) " +
+                             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE " +
+                             "`rank` = ?, score = ?, join_particle = ?, join_message = ?, chat_color = ?, show_rank = ?, show_vip = ?, show_group = ?, ban_until = ?, ban_reason = ?, loginCount = ?, signInCount = ?, lastSignIn = ?, x = ?, y = ?, z = ?, world = ?, effects_enabled = ?, particle = ?")) {
+            com.darkpixel.utils.PlayerData.PlayerInfo info = context.getPlayerData().getPlayerInfo(playerName);
+            int loginCount = info.loginCount;
+            int signInCount = info.signInCount;
+            long lastSignIn = info.lastSignIn;
+            Location loc = info.location != null ? info.location : new Location(Bukkit.getWorld("world"), 0, 0, 0);
             ps.setString(1, uuid.toString());
             ps.setString(2, playerName);
             ps.setString(3, data.getRank());
@@ -160,23 +165,38 @@ public class RankManager {
             ps.setLong(11, data.getBanUntil());
             ps.setString(12, data.getBanReason());
             ps.setInt(13, loginCount);
-            ps.setString(14, data.getRank());
-            ps.setInt(15, data.getScore());
-            ps.setString(16, data.getJoinParticle().name());
-            ps.setString(17, data.getJoinMessage());
-            ps.setString(18, data.getChatColor());
-            ps.setBoolean(19, data.isShowRank());
-            ps.setBoolean(20, data.isShowVip());
-            ps.setBoolean(21, data.isShowGroup());
-            ps.setLong(22, data.getBanUntil());
-            ps.setString(23, data.getBanReason());
-            ps.setInt(24, loginCount);
+            ps.setInt(14, signInCount);
+            ps.setLong(15, lastSignIn);
+            ps.setDouble(16, loc.getX());
+            ps.setDouble(17, loc.getY());
+            ps.setDouble(18, loc.getZ());
+            ps.setString(19, loc.getWorld().getName());
+            ps.setBoolean(20, info.effects_enabled);
+            ps.setString(21, info.particle.name());
+            ps.setString(22, data.getRank());
+            ps.setInt(23, data.getScore());
+            ps.setString(24, data.getJoinParticle().name());
+            ps.setString(25, data.getJoinMessage());
+            ps.setString(26, data.getChatColor());
+            ps.setBoolean(27, data.isShowRank());
+            ps.setBoolean(28, data.isShowVip());
+            ps.setBoolean(29, data.isShowGroup());
+            ps.setLong(30, data.getBanUntil());
+            ps.setString(31, data.getBanReason());
+            ps.setInt(32, loginCount);
+            ps.setInt(33, signInCount);
+            ps.setLong(34, lastSignIn);
+            ps.setDouble(35, loc.getX());
+            ps.setDouble(36, loc.getY());
+            ps.setDouble(37, loc.getZ());
+            ps.setString(38, loc.getWorld().getName());
+            ps.setBoolean(39, info.effects_enabled);
+            ps.setString(40, info.particle.name());
             ps.executeUpdate();
         } catch (SQLException e) {
             e.printStackTrace();
         }
     }
-
     public void setPlayerGroups(UUID uuid, List<String> newGroups) {
         List<String> validGroups = new ArrayList<>();
         for (String group : newGroups) {
