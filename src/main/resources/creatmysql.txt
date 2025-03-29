@@ -8,69 +8,71 @@ USE darkpixel;
 
 -- 创建 players 表（存储玩家核心信息）
 CREATE TABLE IF NOT EXISTS players (
-    uuid VARCHAR(36) PRIMARY KEY,                  -- 主键，使用 UUID 标准长度
-    name VARCHAR(32) NOT NULL,                     -- 增加长度以支持未来可能的用户名扩展
-    `rank` VARCHAR(20) DEFAULT 'member',           -- 缩短长度，等级名称通常较短
-    score INT UNSIGNED DEFAULT 0,                  -- 使用无符号整数，防止负值
-    join_particle VARCHAR(20) DEFAULT 'FIREWORK',  -- 缩短长度，粒子名称通常较短
+    uuid VARCHAR(36) PRIMARY KEY,
+    name VARCHAR(32) NOT NULL,
+    `rank` VARCHAR(20) DEFAULT 'member',
+    score INT UNSIGNED DEFAULT 0,
+    join_particle VARCHAR(20) DEFAULT 'FIREWORK',
     join_message VARCHAR(255) DEFAULT '欢迎 {player} 加入服务器！',
-    chat_color VARCHAR(20) DEFAULT 'normal',       -- 缩短长度，颜色值通常较短
+    chat_color VARCHAR(20) DEFAULT 'normal',
     show_rank BOOLEAN DEFAULT FALSE,
     show_vip BOOLEAN DEFAULT FALSE,
     show_group BOOLEAN DEFAULT TRUE,
-    ban_until BIGINT DEFAULT 0,                    -- 时间戳表示封禁到期时间
-    ban_reason VARCHAR(255),                       -- 可为空，表示未指定原因
-    login_count INT UNSIGNED DEFAULT 0,            -- 重命名并使用无符号整数
-    signin_count INT UNSIGNED DEFAULT 0,           -- 重命名并使用无符号整数
+    show_score BOOLEAN DEFAULT TRUE,  -- 新增字段
+    ban_until BIGINT DEFAULT 0,
+    ban_reason VARCHAR(255),
+    login_count INT UNSIGNED DEFAULT 0,
+    sign_in_count INT UNSIGNED DEFAULT 0,
     x DOUBLE DEFAULT 0,
     y DOUBLE DEFAULT 0,
     z DOUBLE DEFAULT 0,
     world VARCHAR(50) DEFAULT 'world',
-    last_signin BIGINT DEFAULT 0,                  -- 重命名以统一命名风格
+    last_sign_in BIGINT DEFAULT 0,
     effects_enabled BOOLEAN DEFAULT TRUE,
-    particle VARCHAR(20) DEFAULT 'FIREWORK',       -- 缩短长度，与 join_particle 一致
-    INDEX idx_name (name),                         -- 用于按名称快速查询
-    INDEX idx_ban_until (ban_until),               -- 用于封禁检查
-    INDEX idx_last_signin (last_signin)            -- 用于按最后登录时间排序
+    particle VARCHAR(20) DEFAULT 'FIREWORK',
+    INDEX idx_name (name),
+    INDEX idx_ban_until (ban_until),
+    INDEX idx_last_sign_in (last_sign_in)
 ) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- 创建 groups 表（存储组信息）
 CREATE TABLE IF NOT EXISTS `groups` (
-    name VARCHAR(20) PRIMARY KEY,                  -- 缩短长度，组名通常较短
-    color VARCHAR(10),                             -- 缩短长度，颜色代码较短
-    emoji VARCHAR(10),                             -- 缩短长度，表情通常较短
-    badge VARCHAR(20),                             -- 缩短长度，徽章通常较短
-    prefix VARCHAR(30)                             -- 缩短长度，前缀通常较短
+    name VARCHAR(20) PRIMARY KEY,
+    color VARCHAR(10),
+    emoji VARCHAR(10),
+    badge VARCHAR(20),
+    prefix VARCHAR(30)
 ) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- 创建 player_groups 表（玩家与组的多对多关系表）
 CREATE TABLE IF NOT EXISTS player_groups (
     uuid VARCHAR(36),
     group_name VARCHAR(20),
-    PRIMARY KEY (uuid, group_name),                -- 复合主键
+    player_name VARCHAR(32) NOT NULL,  -- 添加 player_name 字段并设为非空
+    PRIMARY KEY (uuid, group_name),
     FOREIGN KEY (uuid) REFERENCES players(uuid) ON DELETE CASCADE ON UPDATE CASCADE,
     FOREIGN KEY (group_name) REFERENCES `groups`(name) ON DELETE CASCADE ON UPDATE CASCADE,
-    INDEX idx_group_name (group_name)              -- 用于按组名快速查询
+    INDEX idx_group_name (group_name)
 ) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- 创建 bans 表（存储封禁记录）
 CREATE TABLE IF NOT EXISTS bans (
-    uuid VARCHAR(36) PRIMARY KEY,                  -- 主键，与 players 一致
-    player_name VARCHAR(32),                       -- 增加长度，与 players 一致
-    ip VARCHAR(45),                                -- 支持 IPv6 地址（最大长度 45）
-    client_identifier VARCHAR(255),                -- 可为空，用于客户端标识
-    ban_until BIGINT DEFAULT 0,                    -- 时间戳表示封禁到期时间
-    ban_reason VARCHAR(255),                       -- 可为空，表示未指定原因
-    INDEX idx_ban_until (ban_until),               -- 用于封禁检查
-    INDEX idx_player_name (player_name)            -- 用于按名称快速查询
+    uuid VARCHAR(36) PRIMARY KEY,
+    player_name VARCHAR(32),
+    ip VARCHAR(45),
+    client_identifier VARCHAR(255),
+    ban_until BIGINT DEFAULT 0,
+    ban_reason VARCHAR(255),
+    INDEX idx_ban_until (ban_until),
+    INDEX idx_player_name (player_name)
 ) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- 创建 blacklist 表（存储黑名单标识符）
 CREATE TABLE IF NOT EXISTS blacklist (
-    identifier VARCHAR(255) PRIMARY KEY            -- 主键，唯一标识符
+    identifier VARCHAR(255) PRIMARY KEY
 ) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
--- 插入默认组数据（使用 IGNORE 避免重复插入）
+-- 插入默认组数据
 INSERT IGNORE INTO `groups` (name, color, emoji, badge, prefix) VALUES
     ('op', '§c', '', '', '[OP]'),
     ('member', '§f', '', '', '[Member]'),

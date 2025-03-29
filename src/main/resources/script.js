@@ -6,8 +6,11 @@ let allPlayers = [];
 
 async function fetchPlayers() {
     try {
-        const res = await fetch(`${apiBase}/list_players?page=1&pageSize=100`, { cache: "no-store" });
+        console.log("Fetching players from:", `${apiBase}/list_players?page=1&pageSize=1000`);
+        const res = await fetch(`${apiBase}/list_players?page=1&pageSize=1000`, { cache: "no-store" });
+        console.log("Response status:", res.status);
         const data = await res.json();
+        console.log("Received data:", data);
         const status = document.getElementById("status");
         status.textContent = data.status === "success" ? "在线" : "离线";
         status.classList.toggle("online", data.status === "success");
@@ -15,39 +18,28 @@ async function fetchPlayers() {
         allPlayers = data.players || [];
         renderPlayers(allPlayers);
     } catch (err) {
+        console.error("Fetch error:", err);
         const status = document.getElementById("status");
         status.textContent = "离线 (连接失败)";
         status.classList.add("offline");
-        console.error(err);
         renderPlayers([]);
     }
 }
 
 async function fetchGroups() {
     try {
-        const res = await fetch(`${apiBase}/list_groups`);
+        const res = await fetch(`${apiBase}/list_groups`, { cache: "no-store" });
         const data = await res.json();
         if (data.status === "success") {
             availableGroups = data.groups.map(g => g.name);
             const groupList = document.getElementById("group-list");
             groupList.innerHTML = "";
             for (const group of data.groups) {
-                const membersRes = await fetch(`${apiBase}/get_group_members?group=${group.name}`);
-                const membersData = await membersRes.json();
-                const members = membersData.members || [];
                 const div = document.createElement("div");
                 div.className = "group-item";
                 div.innerHTML = `
                     <span style="color: ${group.color}">[${group.prefix || group.name}] ${group.name}</span>
                     <button onclick="deleteGroup('${group.name}')" class="btn danger-btn"><i class="fas fa-trash"></i></button>
-                    <div class="group-members">
-                        ${members.map(member => `
-                            <div class="member">
-                                <img src="https://minotar.net/avatar/${member.name}/32" alt="${member.name}" class="member-avatar">
-                                <span>${member.name}</span>
-                            </div>
-                        `).join("")}
-                    </div>
                 `;
                 groupList.appendChild(div);
             }
@@ -134,9 +126,10 @@ function renderPlayers(players) {
                         <p>
                             <label>显示选项:</label>
                             <span class="checkbox-group">
+                                <label><input type="checkbox" id="show-score-${player.uuid}" ${player.show_score ? "checked" : ""}> 积分</label>
+                                <label><input type="checkbox" id="show-group-${player.uuid}" ${player.show_group ? "checked" : ""}> 身份组</label>
                                 <label><input type="checkbox" id="show-rank-${player.uuid}" ${player.show_rank ? "checked" : ""}> Rank</label>
                                 <label><input type="checkbox" id="show-vip-${player.uuid}" ${player.show_vip ? "checked" : ""}> VIP</label>
-                                <label><input type="checkbox" id="show-group-${player.uuid}" ${player.show_group ? "checked" : ""}> 身份组</label>
                             </span>
                             <button onclick="setDisplayOptions('${player.uuid}')" class="btn primary-btn"><i class="fas fa-check"></i></button>
                             <span id="display-options-status-${player.uuid}" class="status"></span>
@@ -191,7 +184,7 @@ async function setScore(uuid) {
     try {
         await fetch(`${apiBase}/set_score?player=${uuid}&score=${score}`);
         showStatus(`score-status-${uuid}`, "设置成功");
-        fetchPlayers();
+        await fetchPlayers();
     } catch (err) {
         showStatus(`score-status-${uuid}`, "设置失败", true);
     }
@@ -205,7 +198,7 @@ async function setRank(uuid) {
     try {
         await fetch(`${apiBase}/set_rank?player=${uuid}&rank=${encodeURIComponent(rank)}`);
         showStatus(`rank-status-${uuid}`, "设置成功");
-        fetchPlayers();
+        await fetchPlayers();
     } catch (err) {
         showStatus(`rank-status-${uuid}`, "设置失败", true);
     }
@@ -216,7 +209,7 @@ async function setGroup(uuid) {
     try {
         await fetch(`${apiBase}/set_group?player=${uuid}&group=${group}`);
         showStatus(`group-status-${uuid}`, "设置成功");
-        fetchPlayers();
+        await fetchPlayers();
     } catch (err) {
         showStatus(`group-status-${uuid}`, "设置失败", true);
     }
@@ -227,7 +220,7 @@ async function setParticle(uuid) {
     try {
         await fetch(`${apiBase}/set_particle?player=${uuid}&particle=${particle}`);
         showStatus(`particle-status-${uuid}`, "设置成功");
-        fetchPlayers();
+        await fetchPlayers();
     } catch (err) {
         showStatus(`particle-status-${uuid}`, "设置失败", true);
     }
@@ -239,7 +232,7 @@ async function setJoinMessage(uuid) {
     try {
         await fetch(`${apiBase}/set_join_message?player=${uuid}&message=${encodeURIComponent(message)}`);
         showStatus(`join-message-status-${uuid}`, "设置成功");
-        fetchPlayers();
+        await fetchPlayers();
     } catch (err) {
         showStatus(`join-message-status-${uuid}`, "设置失败", true);
     }
@@ -250,20 +243,21 @@ async function setChatColor(uuid) {
     try {
         await fetch(`${apiBase}/set_chat_color?player=${uuid}&chat_color=${chatColor}`);
         showStatus(`chat-color-status-${uuid}`, "设置成功");
-        fetchPlayers();
+        await fetchPlayers();
     } catch (err) {
         showStatus(`chat-color-status-${uuid}`, "设置失败", true);
     }
 }
 
 async function setDisplayOptions(uuid) {
+    const showScore = document.getElementById(`show-score-${uuid}`).checked;
+    const showGroup = document.getElementById(`show-group-${uuid}`).checked;
     const showRank = document.getElementById(`show-rank-${uuid}`).checked;
     const showVip = document.getElementById(`show-vip-${uuid}`).checked;
-    const showGroup = document.getElementById(`show-group-${uuid}`).checked;
     try {
-        await fetch(`${apiBase}/set_display_options?player=${uuid}&show_rank=${showRank}&show_vip=${showVip}&show_group=${showGroup}`);
+        await fetch(`${apiBase}/set_display_options?player=${uuid}&show_score=${showScore}&show_group=${showGroup}&show_rank=${showRank}&show_vip=${showVip}`);
         showStatus(`display-options-status-${uuid}`, "设置成功");
-        fetchPlayers();
+        await fetchPlayers();
     } catch (err) {
         showStatus(`display-options-status-${uuid}`, "设置失败", true);
     }
@@ -276,7 +270,7 @@ async function banPlayer(uuid) {
     try {
         await fetch(`${apiBase}/ban?player=${uuid}&banTime=${time}&reason=${encodeURIComponent(reason)}`);
         showStatus(`ban-status-${uuid}`, "封禁成功");
-        fetchPlayers();
+        await fetchPlayers();
     } catch (err) {
         showStatus(`ban-status-${uuid}`, "封禁失败", true);
     }
@@ -286,7 +280,7 @@ async function unbanPlayer(uuid) {
     try {
         await fetch(`${apiBase}/unban?player=${uuid}`);
         showStatus(`ban-status-${uuid}`, "解封成功");
-        fetchPlayers();
+        await fetchPlayers();
     } catch (err) {
         showStatus(`ban-status-${uuid}`, "解封失败", true);
     }
@@ -301,7 +295,7 @@ async function createGroup() {
     const prefix = document.getElementById("group-prefix").value || `[${name}]`;
     try {
         await fetch(`${apiBase}/create_group?name=${encodeURIComponent(name)}&color=${encodeURIComponent(color)}&emoji=${encodeURIComponent(emoji)}&badge=${encodeURIComponent(badge)}&prefix=${encodeURIComponent(prefix)}`);
-        fetchGroups();
+        await fetchGroups();
         document.getElementById("group-name").value = "";
         document.getElementById("group-color").value = "";
         document.getElementById("group-emoji").value = "";
@@ -317,7 +311,7 @@ async function deleteGroup(name) {
     if (!confirm(`确定删除身份组 ${name} 吗？`)) return;
     try {
         await fetch(`${apiBase}/delete_group?name=${encodeURIComponent(name)}`);
-        fetchGroups();
+        await fetchGroups();
     } catch (err) {
         console.error(err);
         alert("删除身份组失败");
@@ -325,9 +319,9 @@ async function deleteGroup(name) {
 }
 
 document.getElementById("search-input").addEventListener("input", debounce(searchPlayers, 300));
-document.getElementById("refresh-btn").addEventListener("click", () => {
-    fetchPlayers();
-    fetchGroups();
+document.getElementById("refresh-btn").addEventListener("click", async () => {
+    await fetchPlayers();
+    await fetchGroups();
 });
 
 function debounce(func, wait) {
@@ -338,10 +332,10 @@ function debounce(func, wait) {
     };
 }
 
-setInterval(() => {
-    fetchPlayers();
-    fetchGroups();
-}, 5000);
+setInterval(async () => {
+    await fetchPlayers();
+    await fetchGroups();
+}, 40000);
 
 fetchPlayers();
 fetchGroups();

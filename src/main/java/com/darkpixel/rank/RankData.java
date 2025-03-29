@@ -2,18 +2,18 @@ package com.darkpixel.rank;
 
 import org.bukkit.Particle;
 
-import java.util.ArrayList;
 import java.util.List;
 
 public class RankData {
-    String rank;
-    int score;
+    private String rank;
+    private int score;
     private Particle joinParticle;
     private String joinMessage;
     private String chatColor;
     private boolean showRank;
     private boolean showVip;
     private boolean showGroup;
+    private boolean showScore;
     private long banUntil;
     private String banReason;
     private List<String> groups;
@@ -24,12 +24,12 @@ public class RankData {
         this.joinParticle = Particle.FIREWORK;
         this.joinMessage = "欢迎 {player} 加入服务器！";
         this.chatColor = "normal";
-        this.showRank = false; // 默认不展示Rank
+        this.showRank = false;
         this.showVip = false;
-        this.showGroup = true; // 默认展示身份组
+        this.showGroup = true;
+        this.showScore = true;
         this.banUntil = 0;
         this.banReason = null;
-        this.groups = new ArrayList<>();
     }
 
     public String getRank() { return rank; }
@@ -48,6 +48,8 @@ public class RankData {
     public void setShowVip(boolean showVip) { this.showVip = showVip; }
     public boolean isShowGroup() { return showGroup; }
     public void setShowGroup(boolean showGroup) { this.showGroup = showGroup; }
+    public boolean isShowScore() { return showScore; }
+    public void setShowScore(boolean showScore) { this.showScore = showScore; }
     public long getBanUntil() { return banUntil; }
     public void setBanUntil(long banUntil) { this.banUntil = banUntil; }
     public String getBanReason() { return banReason; }

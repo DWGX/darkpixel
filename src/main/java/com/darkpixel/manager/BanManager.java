@@ -4,6 +4,7 @@ import com.darkpixel.Global;
 import org.bukkit.BanList;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
+
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -24,7 +25,7 @@ public class BanManager {
         String kickMessage = "你已被封禁" + (banUntil == -1 ? "永久" : "，剩余 " + ((banUntil - System.currentTimeMillis()) / 60000) + " 分钟") + "\n原因：" + reason;
 
         if (player != null && player.isOnline()) {
-            player.kickPlayer(kickMessage);
+            Bukkit.getScheduler().runTask(context.getPlugin(), () -> player.kickPlayer(kickMessage));
         }
 
         Date expiry = banUntil == -1 ? null : new Date(banUntil);
@@ -91,7 +92,6 @@ public class BanManager {
     private void updateGroupStatus(UUID uuid, String playerName, long banUntil) {
         try (Connection conn = context.getRankManager().getConnection()) {
             conn.setAutoCommit(false);
-            // 使用 INSERT ... ON DUPLICATE KEY UPDATE，避免重复插入
             try (PreparedStatement ps = conn.prepareStatement(
                     "INSERT INTO player_groups (uuid, player_name, group_name) " +
                             "VALUES (?, ?, ?) " +

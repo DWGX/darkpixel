@@ -88,13 +88,13 @@ public class LoginMessageUtil implements Listener {
         Particle particle = rankManager.getJoinParticle(player);
         String joinMessage = rankManager.getJoinMessage(player).replace("{player}", displayName);
         Global.executor.submit(() -> playerData.updatePlayer(player));
-        int loginCount = playerData.getPlayerInfo(playerName).loginCount;
+        int login_count = playerData.getPlayerInfo(playerName).login_count;
 
         // 设置默认加入消息
-        event.setJoinMessage("§7Lobby §8| §a" + playerName + " (" + rank + ") 欢迎第 " + loginCount + " 次加入黑像素服务器");
+        event.setJoinMessage("§7Lobby §8| §a" + playerName + " (" + rank + ") 欢迎第 " + login_count + " 次加入黑像素服务器");
 
         // 使用 tellraw 发送酷炫欢迎消息
-        String tellrawCommand = "tellraw @a [{\"text\":\"§l§6欢迎 \",\"bold\":true},{\"text\":\"" + displayName + "\",\"color\":\"aqua\",\"bold\":true},{\"text\":\" §e加入服务器！\",\"bold\":true},{\"text\":\" (§b第 " + loginCount + " 次§e)\",\"color\":\"yellow\"}]";
+        String tellrawCommand = "tellraw @a [{\"text\":\"§l§6欢迎 \",\"bold\":true},{\"text\":\"" + displayName + "\",\"color\":\"aqua\",\"bold\":true},{\"text\":\" §e加入服务器！\",\"bold\":true},{\"text\":\" (§b第 " + login_count + " 次§e)\",\"color\":\"yellow\"}]";
         Bukkit.dispatchCommand(Bukkit.getConsoleSender(), tellrawCommand);
 
         player.getWorld().spawnParticle(particle, player.getLocation(), 100);
@@ -140,7 +140,7 @@ public class LoginMessageUtil implements Listener {
             new BukkitRunnable() {
                 @Override
                 public void run() {
-                    Global.executor.submit(() -> aiChat.sendMessage(player, "玩家 " + playerName + "（Rank: " + rank + "，分数: " + score + "）第 " + loginCount + " 次加入服务器，坐标: " +
+                    Global.executor.submit(() -> aiChat.sendMessage(player, "玩家 " + playerName + "（Rank: " + rank + "，分数: " + score + "）第 " + login_count + " 次加入服务器，坐标: " +
                             player.getLocation().getBlockX() + "," + player.getLocation().getBlockY() + "," + player.getLocation().getBlockZ() + "，请用中文生成一个自然、友好的欢迎消息", false, response ->
                             player.sendMessage("§b" + response)));
                 }

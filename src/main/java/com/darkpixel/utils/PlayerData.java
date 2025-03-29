@@ -49,18 +49,18 @@ public class PlayerData {
             while (rs.next()) {
                 String name = rs.getString("name");
                 String uuid = rs.getString("uuid");
-                int loginCount = rs.getInt("loginCount");
-                int signInCount = rs.getInt("signInCount");
+                int login_count = rs.getInt("login_count");
+                int sign_in_count = rs.getInt("sign_in_count");
                 double x = rs.getDouble("x");
                 double y = rs.getDouble("y");
                 double z = rs.getDouble("z");
                 String world = rs.getString("world");
-                long lastSignIn = rs.getLong("lastSignIn");
+                long last_sign_in = rs.getLong("last_sign_in");
                 boolean effects_enabled = rs.getBoolean("effects_enabled");
                 String particle = rs.getString("particle");
-                PlayerInfo info = new PlayerInfo(loginCount, new Location(context.getPlugin().getServer().getWorld(world), x, y, z));
-                info.signInCount = signInCount;
-                info.lastSignIn = lastSignIn;
+                PlayerInfo info = new PlayerInfo(login_count, new Location(context.getPlugin().getServer().getWorld(world), x, y, z));
+                info.sign_in_count = sign_in_count;
+                info.last_sign_in = last_sign_in;
                 info.effects_enabled = effects_enabled;
                 info.particle = particle != null ? Particle.valueOf(particle) : Particle.FIREWORK;
                 try (PreparedStatement ps = conn.prepareStatement("SELECT group_name FROM player_groups WHERE uuid = ?")) {
@@ -81,18 +81,18 @@ public class PlayerData {
 
     private void loadDataFromYaml() {
         for (String key : config.getKeys(false)) {
-            int loginCount = config.getInt(key + ".loginCount", 0);
-            int signInCount = config.getInt(key + ".signInCount", 0);
+            int login_count = config.getInt(key + ".login_count", 0);
+            int sign_in_count = config.getInt(key + ".sign_in_Count", 0);
             double x = config.getDouble(key + ".x", 0);
             double y = config.getDouble(key + ".y", 0);
             double z = config.getDouble(key + ".z", 0);
             String world = config.getString(key + ".world", "world");
-            long lastSignIn = config.getLong(key + ".lastSignIn", 0L);
+            long last_sign_in = config.getLong(key + ".last_sign_in", 0L);
             boolean effects_enabled = config.getBoolean(key + ".effects_enabled", true);
             String particle = config.getString(key + ".particle", "FIREWORK");
-            PlayerInfo info = new PlayerInfo(loginCount, new Location(context.getPlugin().getServer().getWorld(world), x, y, z));
-            info.signInCount = signInCount;
-            info.lastSignIn = lastSignIn;
+            PlayerInfo info = new PlayerInfo(login_count, new Location(context.getPlugin().getServer().getWorld(world), x, y, z));
+            info.sign_in_count = sign_in_count;
+            info.last_sign_in = last_sign_in;
             info.effects_enabled = effects_enabled;
             info.particle = Particle.valueOf(particle);
             if (info.groups.isEmpty()) info.groups.add("member");
@@ -101,72 +101,75 @@ public class PlayerData {
     }
 
     public void saveData() {
-        try (Connection conn = getConnection()) {
-            conn.setAutoCommit(false); // 开启事务
-            for (Map.Entry<String, PlayerInfo> entry : playerData.entrySet()) {
-                String name = entry.getKey();
-                PlayerInfo info = entry.getValue();
-                Player player = context.getPlugin().getServer().getPlayer(name);
-                String uuid = player != null ? player.getUniqueId().toString() :
-                        context.getPlugin().getServer().getOfflinePlayer(name).getUniqueId().toString();
+        int maxRetries = 3;
+        for (int attempt = 1; attempt <= maxRetries; attempt++) {
+            try (Connection conn = getConnection()) {
+                conn.setAutoCommit(false);
+                for (Map.Entry<String, PlayerInfo> entry : playerData.entrySet()) {
+                    String name = entry.getKey();
+                    PlayerInfo info = entry.getValue();
+                    Player player = context.getPlugin().getServer().getPlayer(name);
+                    String uuid = player != null ? player.getUniqueId().toString() :
+                            context.getPlugin().getServer().getOfflinePlayer(name).getUniqueId().toString();
 
-                // 保存玩家基本信息
-                try (PreparedStatement ps = conn.prepareStatement(
-                        "INSERT INTO players (uuid, name, loginCount, signInCount, x, y, z, world, lastSignIn, effects_enabled, particle) " +
-                                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE " +
-                                "name = ?, loginCount = ?, signInCount = ?, x = ?, y = ?, z = ?, world = ?, lastSignIn = ?, effects_enabled = ?, particle = ?")) {
-                    ps.setString(1, uuid);
-                    ps.setString(2, name);
-                    ps.setInt(3, info.loginCount);
-                    ps.setInt(4, info.signInCount);
-                    ps.setDouble(5, info.location.getX());
-                    ps.setDouble(6, info.location.getY());
-                    ps.setDouble(7, info.location.getZ());
-                    ps.setString(8, info.location.getWorld().getName());
-                    ps.setLong(9, info.lastSignIn);
-                    ps.setBoolean(10, info.effects_enabled);
-                    ps.setString(11, info.particle.name());
-                    ps.setString(12, name);
-                    ps.setInt(13, info.loginCount);
-                    ps.setInt(14, info.signInCount);
-                    ps.setDouble(15, info.location.getX());
-                    ps.setDouble(16, info.location.getY());
-                    ps.setDouble(17, info.location.getZ());
-                    ps.setString(18, info.location.getWorld().getName());
-                    ps.setLong(19, info.lastSignIn);
-                    ps.setBoolean(20, info.effects_enabled);
-                    ps.setString(21, info.particle.name());
-                    ps.executeUpdate();
-                }
-
-                // 删除旧的组记录
-                try (PreparedStatement ps = conn.prepareStatement("DELETE FROM player_groups WHERE uuid = ?")) {
-                    ps.setString(1, uuid);
-                    ps.executeUpdate();
-                }
-
-                // 使用 Set 去重并插入组记录
-                Set<String> uniqueGroups = new HashSet<>(info.groups); // 去重
-                try (PreparedStatement ps = conn.prepareStatement(
-                        "INSERT IGNORE INTO player_groups (uuid, player_name, group_name) VALUES (?, ?, ?)")) {
-                    for (String group : uniqueGroups) {
+                    try (PreparedStatement ps = conn.prepareStatement(
+                            "INSERT INTO players (uuid, name, login_count, sign_in_count, x, y, z, world, last_sign_in, effects_enabled, particle) " +
+                                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE " +
+                                    "name = ?, login_count = ?, sign_in_count = ?, x = ?, y = ?, z = ?, world = ?, last_sign_in = ?, effects_enabled = ?, particle = ?")) {
                         ps.setString(1, uuid);
                         ps.setString(2, name);
-                        ps.setString(3, group);
-                        ps.addBatch(); // 使用批量插入
+                        ps.setInt(3, info.login_count);
+                        ps.setInt(4, info.sign_in_count);
+                        ps.setDouble(5, info.location.getX());
+                        ps.setDouble(6, info.location.getY());
+                        ps.setDouble(7, info.location.getZ());
+                        ps.setString(8, info.location.getWorld().getName());
+                        ps.setLong(9, info.last_sign_in);
+                        ps.setBoolean(10, info.effects_enabled);
+                        ps.setString(11, info.particle.name());
+                        ps.setString(12, name);
+                        ps.setInt(13, info.login_count);
+                        ps.setInt(14, info.sign_in_count);
+                        ps.setDouble(15, info.location.getX());
+                        ps.setDouble(16, info.location.getY());
+                        ps.setDouble(17, info.location.getZ());
+                        ps.setString(18, info.location.getWorld().getName());
+                        ps.setLong(19, info.last_sign_in);
+                        ps.setBoolean(20, info.effects_enabled);
+                        ps.setString(21, info.particle.name());
+                        ps.executeUpdate();
                     }
-                    ps.executeBatch(); // 执行批量插入
+
+                    try (PreparedStatement deletePs = conn.prepareStatement("DELETE FROM player_groups WHERE uuid = ?")) {
+                        deletePs.setString(1, uuid);
+                        deletePs.executeUpdate();
+                    }
+                    try (PreparedStatement insertPs = conn.prepareStatement(
+                            "INSERT IGNORE INTO player_groups (uuid, group_name) VALUES (?, ?)")) {
+                        for (String group : new HashSet<>(info.groups)) {
+                            insertPs.setString(1, uuid);
+                            insertPs.setString(2, group);
+                            insertPs.addBatch();
+                        }
+                        insertPs.executeBatch();
+                    }
                 }
+                conn.commit();
+                return;
+            } catch (SQLException e) {
+                context.getPlugin().getLogger().severe("保存玩家数据失败 (尝试 " + attempt + "/" + maxRetries + "): " + e.getMessage());
+                if (e.getMessage().contains("Deadlock") && attempt < maxRetries) {
+                    try {
+                        Thread.sleep(100 * attempt);
+                        continue;
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+                saveDataAsync();
+                break;
             }
-            conn.commit(); // 提交事务
-        } catch (SQLException e) {
-            context.getPlugin().getLogger().severe("保存玩家数据失败: " + e.getMessage());
-            try (Connection conn = getConnection()) {
-                conn.rollback(); // 回滚事务
-            } catch (SQLException rollbackEx) {
-                context.getPlugin().getLogger().severe("回滚事务失败: " + rollbackEx.getMessage());
-            }
-            saveDataAsync(); // 失败时保存到 YAML
         }
     }
 
@@ -174,13 +177,13 @@ public class PlayerData {
         for (Map.Entry<String, PlayerInfo> entry : playerData.entrySet()) {
             String name = entry.getKey();
             PlayerInfo info = entry.getValue();
-            config.set(name + ".loginCount", info.loginCount);
-            config.set(name + ".signInCount", info.signInCount);
+            config.set(name + ".login_count", info.login_count);
+            config.set(name + ".sign_in_count", info.sign_in_count);
             config.set(name + ".x", info.location.getX());
             config.set(name + ".y", info.location.getY());
             config.set(name + ".z", info.location.getZ());
             config.set(name + ".world", info.location.getWorld().getName());
-            config.set(name + ".lastSignIn", info.lastSignIn);
+            config.set(name + ".last_sign_in", info.last_sign_in);
             config.set(name + ".effects_enabled", info.effects_enabled);
             config.set(name + ".particle", info.particle.name());
         }
@@ -198,27 +201,27 @@ public class PlayerData {
         saveData();
     }
 
-    public int getSignInCount(Player player) {
-        return getPlayerInfo(player.getName()).signInCount;
+    public int getsign_in_count(Player player) {
+        return getPlayerInfo(player.getName()).sign_in_count;
     }
 
-    public void setSignInCount(Player player, int count) {
+    public void setsign_in_count(Player player, int count) {
         PlayerInfo info = getPlayerInfo(player.getName());
-        info.signInCount = count;
+        info.sign_in_count = count;
         saveData();
     }
 
     public void updatePlayer(Player player) {
         String name = player.getName();
         PlayerInfo info = playerData.getOrDefault(name, new PlayerInfo(0, player.getLocation()));
-        info.loginCount++;
+        info.login_count++;
         info.location = player.getLocation();
         info.health = player.getHealth();
         info.foodLevel = player.getFoodLevel();
         info.inventoryContents = player.getInventory().getContents();
         info.effects = player.getActivePotionEffects();
         if (info.groups.isEmpty()) {
-            info.groups.clear(); // 清空后再添加，避免重复
+            info.groups.clear();
             info.groups.add("member");
         }
         playerData.put(name, info);
@@ -254,27 +257,27 @@ public class PlayerData {
     }
 
     public static class PlayerInfo {
-        public int loginCount;
-        public int signInCount;
+        public int login_count;
+        public int sign_in_count;
         public Location location;
         public double health;
         public int foodLevel;
         public ItemStack[] inventoryContents;
         public @NotNull Collection<PotionEffect> effects;
-        public long lastSignIn;
+        public long last_sign_in;
         public List<String> groups;
         public boolean effects_enabled;
         public Particle particle;
 
-        public PlayerInfo(int loginCount, Location location) {
-            this.loginCount = loginCount;
-            this.signInCount = 0;
+        public PlayerInfo(int login_count, Location location) {
+            this.login_count = login_count;
+            this.sign_in_count = 0;
             this.location = location;
             this.health = 20.0;
             this.foodLevel = 20;
             this.inventoryContents = new ItemStack[36];
-            this.effects = new ArrayList<PotionEffect>();
-            this.lastSignIn = 0L;
+            this.effects = new ArrayList<>();
+            this.last_sign_in = 0L;
             this.groups = new ArrayList<>();
             this.effects_enabled = true;
             this.particle = Particle.FIREWORK;
@@ -309,13 +312,13 @@ public class PlayerData {
                 " | 效果: " + info.getEffectsDescription();
     }
 
-    public void setLastSignIn(Player player, long time) {
+    public void setlast_sign_in(Player player, long time) {
         PlayerInfo info = getPlayerInfo(player.getName());
-        info.lastSignIn = time;
+        info.last_sign_in = time;
         saveData();
     }
 
-    public long getLastSignIn(Player player) {
-        return getPlayerInfo(player.getName()).lastSignIn;
+    public long getlast_sign_in(Player player) {
+        return getPlayerInfo(player.getName()).last_sign_in;
     }
 }

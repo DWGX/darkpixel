@@ -5,8 +5,8 @@ public class PlayerRank {
     private String rank;
     private int score;
     private long lastModified;
-    private long lastSignIn;
-    private int signInCount;
+    private long last_sign_in;
+    private int sign_in_count;
     private boolean enableEffects;
 
     public PlayerRank(String name) {
@@ -14,8 +14,8 @@ public class PlayerRank {
         this.rank = "member";
         this.score = 0;
         this.lastModified = System.currentTimeMillis();
-        this.lastSignIn = 0;
-        this.signInCount = 0;
+        this.last_sign_in = 0;
+        this.sign_in_count = 0;
         this.enableEffects = true;
     }
 
@@ -27,10 +27,10 @@ public class PlayerRank {
     public void setScore(int score) { this.score = score; }
     public long getLastModified() { return lastModified; }
     public void setLastModified(long lastModified) { this.lastModified = lastModified; }
-    public long getLastSignIn() { return lastSignIn; }
-    public void setLastSignIn(long lastSignIn) { this.lastSignIn = lastSignIn; }
-    public int getSignInCount() { return signInCount; }
-    public void setSignInCount(int signInCount) { this.signInCount = signInCount; }
+    public long getlast_sign_in() { return last_sign_in; }
+    public void setlast_sign_in(long last_sign_in) { this.last_sign_in = last_sign_in; }
+    public int getsign_in_count() { return sign_in_count; }
+    public void setsign_in_count(int sign_in_count) { this.sign_in_count = sign_in_count; }
     public boolean isEnableEffects() { return enableEffects; }
     public void setEnableEffects(boolean enableEffects) { this.enableEffects = enableEffects; }
 }

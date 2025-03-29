@@ -28,36 +28,29 @@ public class ChatListener implements Listener {
     public void onChat(AsyncPlayerChatEvent event) {
         Player player = event.getPlayer();
         UUID uuid = player.getUniqueId();
-
-        //使用缓存的聊天格式避免重复计算
         String cachedFormat = cachedFormats.computeIfAbsent(uuid, k -> buildChatFormat(player));
-        String message = applyChatColor(player, ChatColor.stripColor(event.getMessage())); // 清理输入防止注入
+        String message = applyChatColor(player, ChatColor.stripColor(event.getMessage()));
         event.setFormat(cachedFormat + message);
     }
 
     private String buildChatFormat(Player player) {
-        PlayerData.PlayerInfo info = playerData.getPlayerInfo(player.getName());
+        UUID uuid = player.getUniqueId();
+        RankData data = rankManager.getAllRanks().getOrDefault(uuid, new RankData("member", 0));
         List<String> groups = rankManager.getPlayerGroups(player);
-        String groupPrefix = groups.stream()
-                .map(group -> rankManager.getGroups().getOrDefault(group, new RankGroup(group, "§f", "", "", "[" + group + "]")).getPrefix())
-                .findFirst().orElse("");
-        String rank = rankManager.getRank(player);
-        String[] rankParts = rank.split(" ");
-        String baseRank = rankParts[0];
-        String vip = rankParts.length > 1 ? rankParts[1] : "";
-        StringBuilder format = new StringBuilder();
 
-        if (rankManager.isShowGroup(player)) {
-            format.append(groupPrefix).append(" ");
-        }
-        if (rankManager.isShowRank(player)) {
-            format.append("§e★").append(baseRank);
-            if (rankManager.isShowVip(player) && !vip.isEmpty()) {
-                format.append(" §b").append(vip);
-            }
-            format.append("§r ");
-        }
-        format.append(player.getDisplayName()).append("§r: ");
+        String groupPrefix = groups.isEmpty() ? "[Member]" : rankManager.getGroups().get(groups.get(0)).getPrefix();
+
+        StringBuilder format = new StringBuilder();
+        String baseColor = data.getChatColor().equals("normal") ? "§f" : data.getChatColor();
+        format.append(baseColor);
+
+        // 按顺序添加：积分 -> 身份组 -> Rank -> VIP
+        if (data.isShowScore()) format.append("[").append(data.getScore()).append("]");
+        if (data.isShowGroup()) format.append(groupPrefix); // 直接使用前缀，不额外包裹
+        if (data.isShowRank()) format.append("[").append(data.getRank()).append("]");
+        if (data.isShowVip() && !data.getRank().equals("member")) format.append("[§b★").append(baseColor).append("]");
+
+        format.append(player.getName()).append("§r: ");
         return format.toString();
     }
 
@@ -92,7 +85,6 @@ public class ChatListener implements Listener {
         }
     }
 
-    //更新缓（例如玩家权限或组变更时）
     public void updateCache(Player player) {
         cachedFormats.put(player.getUniqueId(), buildChatFormat(player));
     }

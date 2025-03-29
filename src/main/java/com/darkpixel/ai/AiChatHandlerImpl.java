@@ -215,7 +215,7 @@ public class AiChatHandlerImpl implements AiChatHandler {
     private String buildPlayerContext(Player player, PlayerData.PlayerInfo info) {
         return "玩家名: " + player.getName() + ", 位置: " + player.getLocation().getBlockX() + "," +
                 player.getLocation().getBlockY() + "," + player.getLocation().getBlockZ() + ", 世界: " +
-                player.getWorld().getName() + ", 登录次数: " + (info != null ? info.loginCount : 0) +
+                player.getWorld().getName() + ", 登录次数: " + (info != null ? info.login_count : 0) +
                 ", 生命值: " + player.getHealth() + ", 饥饿值: " + player.getFoodLevel() +
                 ", 是否飞行: " + (player.isFlying() ? "是" : "否");
     }

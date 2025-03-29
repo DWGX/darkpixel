@@ -48,16 +48,16 @@ public class SignInContainer implements Listener {
     private void openSignInInventory(Player player) {
         Inventory inv = Bukkit.createInventory(null, 27, "§a每日签到");
         RankData rankData = rankManager.getAllRanks().getOrDefault(player.getUniqueId(), new RankData("member", 0));
-        long lastSignIn = getLastSignIn(player);
-        int signInCount = getSignInCount(player);
+        long last_sign_in = getlast_sign_in(player);
+        int sign_in_count = getsign_in_count(player);
         long currentTime = System.currentTimeMillis();
-        boolean canSignIn = currentTime - lastSignIn >= SIGN_IN_COOLDOWN;
+        boolean canSignIn = currentTime - last_sign_in >= SIGN_IN_COOLDOWN;
 
         ItemStack signInButton = new ItemStack(canSignIn ? Material.EMERALD : Material.REDSTONE);
         ItemMeta meta = signInButton.getItemMeta();
         meta.setDisplayName(canSignIn ? "§a点击签到" : "§c已签到，明天再来");
-        meta.setLore(Arrays.asList("§7签到次数: " + signInCount,
-                "§7上次签到: " + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date(lastSignIn))));
+        meta.setLore(Arrays.asList("§7签到次数: " + sign_in_count,
+                "§7上次签到: " + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date(last_sign_in))));
         signInButton.setItemMeta(meta);
         inv.setItem(13, signInButton);
 
@@ -76,20 +76,20 @@ public class SignInContainer implements Listener {
 
         RankData rankData = rankManager.getAllRanks().getOrDefault(player.getUniqueId(), new RankData("member", 0));
         long currentTime = System.currentTimeMillis();
-        long lastSignIn = getLastSignIn(player);
-        int signInCount = getSignInCount(player);
+        long last_sign_in = getlast_sign_in(player);
+        int sign_in_count = getsign_in_count(player);
 
-        if (currentTime - lastSignIn < SIGN_IN_COOLDOWN) {
+        if (currentTime - last_sign_in < SIGN_IN_COOLDOWN) {
             player.sendMessage("§c你今天已经签到过了，请明天再来！");
             return;
         }
 
-        setLastSignIn(player, currentTime);
-        int newSignInCount = signInCount + 1;
-        setSignInCount(player, newSignInCount);
+        setlast_sign_in(player, currentTime);
+        int newsign_in_count = sign_in_count + 1;
+        setsign_in_count(player, newsign_in_count);
         int newScore = rankData.getScore() + 10;
         rankManager.setRank(player, rankData.getRank(), newScore, rankManager.getJoinParticle(player), rankManager.getJoinMessage(player));
-        player.sendMessage("§a签到成功！签到次数: " + newSignInCount + "，分数 +10，新分数: " + newScore);
+        player.sendMessage("§a签到成功！签到次数: " + newsign_in_count + "，分数 +10，新分数: " + newScore);
         player.closeInventory();
     }
 
@@ -98,19 +98,19 @@ public class SignInContainer implements Listener {
         openInventories.remove(event.getPlayer().getUniqueId());
     }
 
-    private long getLastSignIn(Player player) {
-        return context.getPlayerData().getLastSignIn(player);
+    private long getlast_sign_in(Player player) {
+        return context.getPlayerData().getlast_sign_in(player);
     }
 
-    private void setLastSignIn(Player player, long time) {
-        context.getPlayerData().setLastSignIn(player, time);
+    private void setlast_sign_in(Player player, long time) {
+        context.getPlayerData().setlast_sign_in(player, time);
     }
 
-    private int getSignInCount(Player player) {
-        return context.getPlayerData().getSignInCount(player);
+    private int getsign_in_count(Player player) {
+        return context.getPlayerData().getsign_in_count(player);
     }
 
-    private void setSignInCount(Player player, int count) {
-        context.getPlayerData().setSignInCount(player, count);
+    private void setsign_in_count(Player player, int count) {
+        context.getPlayerData().setsign_in_count(player, count);
     }
 }
