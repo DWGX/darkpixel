@@ -44,9 +44,8 @@ public class ChatListener implements Listener {
         String baseColor = data.getChatColor().equals("normal") ? "§f" : data.getChatColor();
         format.append(baseColor);
 
-        // 按顺序添加：积分 -> 身份组 -> Rank -> VIP
         if (data.isShowScore()) format.append("[").append(data.getScore()).append("]");
-        if (data.isShowGroup()) format.append(groupPrefix); // 直接使用前缀，不额外包裹
+        if (data.isShowGroup()) format.append(groupPrefix);
         if (data.isShowRank()) format.append("[").append(data.getRank()).append("]");
         if (data.isShowVip() && !data.getRank().equals("member")) format.append("[§b★").append(baseColor).append("]");
 

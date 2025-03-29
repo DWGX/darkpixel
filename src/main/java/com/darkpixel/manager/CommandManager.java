@@ -41,16 +41,13 @@ public class CommandManager implements CommandExecutor {
         registerCommand(plugin, "ping", this);
         registerCommand(plugin, "getswitchchest", context.getServerSwitchChest());
         registerCommand(plugin, "getradio", context.getServerRadioChest());
-        registerCommand(plugin, "rank", new RankCommands(context)); // 修复：传入 context (Global)
+        registerCommand(plugin, "rank", new RankCommands(context));
         registerCommand(plugin, "darkban", this);
     }
 
     private void registerCommand(JavaPlugin plugin, String commandName, CommandExecutor executor) {
         if (plugin.getCommand(commandName) != null) {
             plugin.getCommand(commandName).setExecutor(executor);
-            plugin.getLogger().info("成功注册命令: /" + commandName);
-        } else {
-            plugin.getLogger().severe("无法注册命令 '/" + commandName + "'，请检查 plugin.yml 是否正确配置！");
         }
     }
 
@@ -72,13 +69,7 @@ public class CommandManager implements CommandExecutor {
                         return true;
                     }
                     String playerName = args[1];
-                    long banTime;
-                    try {
-                        banTime = Long.parseLong(args[2]);
-                    } catch (NumberFormatException e) {
-                        sender.sendMessage("§c时间必须是数字或-1！");
-                        return true;
-                    }
+                    long banTime = Long.parseLong(args[2]);
                     String reason = args.length > 3 ? String.join(" ", Arrays.copyOfRange(args, 3, args.length)) : "未指定原因";
                     long banUntil = banTime == -1 ? -1 : (banTime > 0 ? System.currentTimeMillis() + banTime * 60000 : 0);
                     banManager.banPlayer(playerName, banUntil, reason);
@@ -90,23 +81,42 @@ public class CommandManager implements CommandExecutor {
                     }
                     banManager.unbanPlayer(args[1]);
                     sender.sendMessage("§a已解禁 " + args[1]);
-                } else {
-                    sender.sendMessage("§c未知子命令！用法: /darkban ban 或 /darkban unban");
                 }
                 return true;
             case "giveblockablesword":
                 return giveBlockableSword.onCommand(sender, command, label, args);
             case "geiwoqian":
-                return handleGeiWoQian(sender);
+                if (!(sender instanceof Player)) {
+                    sender.sendMessage("§c仅玩家可用！");
+                    return true;
+                }
+                sender.sendMessage("§c别想了，服务器不发钱！");
+                return true;
             case "setchattimes":
-                return handleSetChatTimes(sender, args);
+                if (!sender.hasPermission("darkpixel.admin")) {
+                    sender.sendMessage("§c需要管理员权限！");
+                    return true;
+                }
+                if (args.length != 2) {
+                    sender.sendMessage("§c用法: /setchattimes <玩家> <次数>");
+                    return true;
+                }
+                Player target = Bukkit.getPlayer(args[0]);
+                if (target == null) {
+                    sender.sendMessage("§c玩家 " + args[0] + " 不在线！");
+                    return true;
+                }
+                int times = Integer.parseInt(args[1]);
+                Global.executor.submit(() -> context.getAiChat().setPlayerMessageLimit(target.getName(), times));
+                sender.sendMessage("§a已将 " + target.getName() + " 的聊天次数设置为 " + times);
+                return true;
             case "togglesit":
                 if (!sender.hasPermission("darkpixel.admin")) {
                     sender.sendMessage("§c需要管理员权限！");
                     return true;
                 }
-                boolean enabled = !context.getConfigManager().getConfig("config.yml").getBoolean("sitting.enabled", true);
-                context.getConfigManager().getConfig("config.yml").set("sitting.enabled", enabled);
+                boolean enabled = !context.getConfigManager().isSittingEnabled();
+                context.getConfigManager().getConfig().set("sitting.enabled", enabled);
                 Global.executor.submit(() -> context.getConfigManager().saveConfig("config.yml"));
                 context.updateSitUtils();
                 sender.sendMessage("§a坐下功能已" + (enabled ? "开启" : "关闭"));
@@ -135,51 +145,14 @@ public class CommandManager implements CommandExecutor {
                 }
                 return true;
             case "ping":
-                return handlePing(sender, args);
+                target = (args.length > 0) ? Bukkit.getPlayer(args[0]) : (sender instanceof Player ? (Player) sender : null);
+                if (target == null) {
+                    sender.sendMessage("§c玩家不在线或未指定！");
+                    return true;
+                }
+                sender.sendMessage(PingUtils.formatPingMessage(target.getName(), target.getPing()));
+                return true;
         }
         return false;
-    }
-
-    private boolean handleGeiWoQian(CommandSender sender) {
-        if (!(sender instanceof Player)) {
-            sender.sendMessage("§c仅玩家可用！");
-            return true;
-        }
-        sender.sendMessage("§c别想了，服务器不发钱！");
-        return true;
-    }
-
-    private boolean handleSetChatTimes(CommandSender sender, String[] args) {
-        if (!sender.hasPermission("darkpixel.admin")) {
-            sender.sendMessage("§c需要管理员权限！");
-            return true;
-        }
-        if (args.length != 2) {
-            sender.sendMessage("§c用法: /setchattimes <玩家> <次数>");
-            return true;
-        }
-        Player target = Bukkit.getPlayer(args[0]);
-        if (target == null) {
-            sender.sendMessage("§c玩家 " + args[0] + " 不在线！");
-            return true;
-        }
-        try {
-            int times = Integer.parseInt(args[1]);
-            Global.executor.submit(() -> context.getAiChat().setPlayerMessageLimit(target.getName(), times));
-            sender.sendMessage("§a已将 " + target.getName() + " 的聊天次数设置为 " + times);
-        } catch (NumberFormatException e) {
-            sender.sendMessage("§c次数必须是整数！");
-        }
-        return true;
-    }
-
-    private boolean handlePing(CommandSender sender, String[] args) {
-        Player target = (args.length > 0) ? Bukkit.getPlayer(args[0]) : (sender instanceof Player ? (Player) sender : null);
-        if (target == null) {
-            sender.sendMessage("§c玩家不在线或未指定！");
-            return true;
-        }
-        sender.sendMessage(PingUtils.formatPingMessage(target.getName(), target.getPing()));
-        return true;
     }
 }

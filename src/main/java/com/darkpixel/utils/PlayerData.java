@@ -7,15 +7,20 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.Particle;
-import org.jetbrains.annotations.NotNull;
+
 import java.io.File;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class PlayerData {
@@ -44,8 +49,8 @@ public class PlayerData {
 
     private void loadData() {
         try (Connection conn = getConnection();
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery("SELECT * FROM players")) {
+             PreparedStatement stmt = conn.prepareStatement("SELECT * FROM players")) {
+            ResultSet rs = stmt.executeQuery();
             while (rs.next()) {
                 String name = rs.getString("name");
                 String uuid = rs.getString("uuid");
@@ -101,8 +106,7 @@ public class PlayerData {
     }
 
     public void saveData() {
-        int maxRetries = 3;
-        for (int attempt = 1; attempt <= maxRetries; attempt++) {
+        Global.executor.submit(() -> {
             try (Connection conn = getConnection()) {
                 conn.setAutoCommit(false);
                 for (Map.Entry<String, PlayerInfo> entry : playerData.entrySet()) {
@@ -145,32 +149,22 @@ public class PlayerData {
                         deletePs.executeUpdate();
                     }
                     try (PreparedStatement insertPs = conn.prepareStatement(
-                            "INSERT IGNORE INTO player_groups (uuid, group_name) VALUES (?, ?)")) {
+                            "INSERT IGNORE INTO player_groups (uuid, player_name, group_name) VALUES (?, ?, ?)")) {
                         for (String group : new HashSet<>(info.groups)) {
                             insertPs.setString(1, uuid);
-                            insertPs.setString(2, group);
+                            insertPs.setString(2, name);
+                            insertPs.setString(3, group);
                             insertPs.addBatch();
                         }
                         insertPs.executeBatch();
                     }
                 }
                 conn.commit();
-                return;
             } catch (SQLException e) {
-                context.getPlugin().getLogger().severe("保存玩家数据失败 (尝试 " + attempt + "/" + maxRetries + "): " + e.getMessage());
-                if (e.getMessage().contains("Deadlock") && attempt < maxRetries) {
-                    try {
-                        Thread.sleep(100 * attempt);
-                        continue;
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        break;
-                    }
-                }
+                context.getPlugin().getLogger().severe("保存玩家数据失败: " + e.getMessage());
                 saveDataAsync();
-                break;
             }
-        }
+        });
     }
 
     private void saveDataAsync() {
@@ -193,11 +187,7 @@ public class PlayerData {
     public void setBanStatus(String playerName, long banUntil, String reason) {
         PlayerInfo info = getPlayerInfo(playerName);
         info.groups.clear();
-        if (banUntil == 0) {
-            info.groups.add("member");
-        } else {
-            info.groups.add("banned");
-        }
+        info.groups.add(banUntil == 0 ? "member" : "banned");
         saveData();
     }
 
@@ -214,16 +204,16 @@ public class PlayerData {
     public void updatePlayer(Player player) {
         String name = player.getName();
         PlayerInfo info = playerData.getOrDefault(name, new PlayerInfo(0, player.getLocation()));
-        info.login_count++;
+        if (info.lastJoinTime == null || System.currentTimeMillis() - info.lastJoinTime > 1000) {
+            info.login_count++;
+            info.lastJoinTime = System.currentTimeMillis();
+        }
         info.location = player.getLocation();
         info.health = player.getHealth();
         info.foodLevel = player.getFoodLevel();
         info.inventoryContents = player.getInventory().getContents();
         info.effects = player.getActivePotionEffects();
-        if (info.groups.isEmpty()) {
-            info.groups.clear();
-            info.groups.add("member");
-        }
+        if (info.groups.isEmpty()) info.groups.add("member");
         playerData.put(name, info);
         saveData();
     }
@@ -263,11 +253,12 @@ public class PlayerData {
         public double health;
         public int foodLevel;
         public ItemStack[] inventoryContents;
-        public @NotNull Collection<PotionEffect> effects;
+        public Collection<PotionEffect> effects;
         public long last_sign_in;
         public List<String> groups;
         public boolean effects_enabled;
         public Particle particle;
+        public Long lastJoinTime;
 
         public PlayerInfo(int login_count, Location location) {
             this.login_count = login_count;
@@ -281,6 +272,7 @@ public class PlayerData {
             this.groups = new ArrayList<>();
             this.effects_enabled = true;
             this.particle = Particle.FIREWORK;
+            this.lastJoinTime = null;
         }
 
         public String getInventoryDescription() {

@@ -24,14 +24,14 @@
             <label for="group-toggle" class="accordion-header"><i class="fas fa-users"></i> 身份组管理</label>
             <div class="accordion-content">
                 <div id="group-list" class="group-list"></div>
-                <div class="group-form">
+                <form id="group-form" class="group-form" onsubmit="createGroup(event)">
                     <input id="group-name" placeholder="组名" class="input-field" required>
                     <input id="group-color" placeholder="颜色 (如 §f)" class="input-field">
                     <input id="group-emoji" placeholder="表情" class="input-field">
                     <input id="group-badge" placeholder="徽章" class="input-field">
                     <input id="group-prefix" placeholder="前缀 (如 [组名])" class="input-field">
-                    <button onclick="createGroup()" class="btn primary-btn"><i class="fas fa-plus"></i> 创建</button>
-                </div>
+                    <button type="submit" class="btn primary-btn"><i class="fas fa-plus"></i> 创建</button>
+                </form>
             </div>
         </div>
     </div>

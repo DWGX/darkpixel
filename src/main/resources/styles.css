@@ -1,24 +1,38 @@
+/* 重置样式 */
 * {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
 }
 
+/* CSS 变量 */
+:root {
+    --primary: #007aff;
+    --success: #34c759;
+    --danger: #ff3b30;
+    --bg-dark: #1a1a1a;
+    --bg-medium: #2c2c2c;
+    --text-light: #e0e0e0;
+    --transition: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 基础样式 */
 body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
-    background: linear-gradient(135deg, #1a1a1a, #2c2c2c);
-    color: #e0e0e0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: linear-gradient(135deg, var(--bg-dark), var(--bg-medium));
+    color: var(--text-light);
     min-height: 100vh;
     padding: 15px;
     overflow-x: hidden;
+    line-height: 1.6;
 }
 
 .container {
     max-width: 1200px;
     margin: 0 auto;
-    position: relative;
 }
 
+/* 服务器状态 */
 .server-status {
     display: flex;
     align-items: center;
@@ -28,30 +42,46 @@ body {
     border-radius: 8px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
     margin-bottom: 15px;
-    transition: all 0.2s ease;
+    backdrop-filter: blur(8px);
+    transition: transform 0.3s var(--transition), box-shadow 0.3s var(--transition);
 }
 
 .server-status:hover {
-    transform: translateY(-1px);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.6);
 }
 
 .status-indicator {
-    padding: 4px 12px;
+    padding: 4px 12px 4px 24px;
     border-radius: 16px;
     font-size: 0.85rem;
-    transition: background 0.3s ease, transform 0.2s ease;
+    position: relative;
+    transition: background 0.3s ease;
+}
+
+.status-indicator::before {
+    content: "";
+    position: absolute;
+    left: 8px;
+    top: 50%;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    transform: translateY(-50%);
+    background: currentColor;
 }
 
 .status-indicator.online {
-    background: #34c759;
+    background: var(--success);
     color: #fff;
 }
 
 .status-indicator.offline {
-    background: #ff3b30;
+    background: var(--danger);
     color: #fff;
 }
 
+/* 搜索栏 */
 .search-bar {
     margin-bottom: 15px;
     position: relative;
@@ -63,16 +93,16 @@ body {
     border: none;
     border-radius: 6px;
     background: rgba(58, 58, 58, 0.9);
-    color: #e0e0e0;
+    color: var(--text-light);
     font-size: 0.95rem;
-    transition: all 0.2s ease;
+    transition: all 0.3s var(--transition);
     box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.2);
 }
 
 .input-field:focus {
     outline: none;
     background: #444;
-    box-shadow: 0 0 8px rgba(0, 122, 255, 0.5);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 40%), inset 0 1px 4px rgba(0, 0, 0, 0.2);
     transform: scale(1.01);
 }
 
@@ -87,11 +117,20 @@ body {
     color: #888;
 }
 
+/* 玩家列表 */
 .player-list {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
     gap: 15px;
     margin-bottom: 30px;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 0.5s var(--transition), transform 0.5s var(--transition);
+}
+
+.player-list.visible {
+    opacity: 1;
+    transform: translateY(0);
 }
 
 .player-card {
@@ -99,13 +138,13 @@ body {
     border-radius: 10px;
     padding: 12px;
     box-shadow: 0 6px 15px rgba(0, 0, 0, 0.4);
-    transition: all 0.2s ease;
+    transition: all 0.3s var(--transition);
     overflow: hidden;
-    animation: slideIn 0.3s ease forwards;
 }
 
 .player-card:hover {
-    transform: translateY(-3px) scale(1.01);
+    transform: translateY(-3px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
 }
 
 .no-data {
@@ -113,9 +152,10 @@ body {
     color: #888;
     padding: 15px;
     font-style: italic;
-    animation: fadeIn 0.3s ease;
+    animation: fadeIn 0.5s ease;
 }
 
+/* 手风琴样式 */
 .accordion-toggle {
     display: none;
 }
@@ -128,7 +168,7 @@ body {
     display: flex;
     align-items: center;
     gap: 8px;
-    transition: all 0.2s ease;
+    transition: background 0.2s ease;
     position: relative;
 }
 
@@ -142,7 +182,7 @@ body {
     font-weight: 900;
     position: absolute;
     right: 12px;
-    transition: transform 0.2s ease;
+    transition: transform 0.3s var(--transition);
 }
 
 .accordion-toggle:checked + .accordion-header::after {
@@ -154,7 +194,7 @@ body {
     opacity: 0;
     padding: 0 12px;
     overflow: hidden;
-    transition: all 0.3s ease;
+    transition: max-height 0.4s var(--transition), opacity 0.3s var(--transition), padding 0.1s linear;
 }
 
 .accordion-toggle:checked + .accordion-header + .accordion-content {
@@ -170,18 +210,19 @@ body {
 }
 
 .scroll-content::-webkit-scrollbar {
-    width: 6px;
+    width: 8px;
 }
 
 .scroll-content::-webkit-scrollbar-thumb {
-    background: #888;
-    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
 }
 
 .scroll-content::-webkit-scrollbar-thumb:hover {
-    background: #aaa;
+    background: rgba(255, 255, 255, 0.4);
 }
 
+/* 玩家卡片内容 */
 .player-card p {
     margin: 8px 0;
     display: flex;
@@ -191,29 +232,45 @@ body {
 }
 
 .player-name.online {
-    color: #34c759;
+    color: var(--success);
     font-weight: bold;
     text-shadow: 0 0 4px rgba(52, 199, 89, 0.3);
 }
 
 .player-name.offline {
-    color: #ff3b30;
+    color: var(--danger);
     font-weight: bold;
     text-shadow: 0 0 4px rgba(255, 59, 48, 0.3);
 }
 
+/* 按钮样式 */
 .btn {
     padding: 6px 12px;
     border: none;
     border-radius: 6px;
     font-size: 0.85rem;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.2s var(--transition);
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+    position: relative;
+    overflow: hidden;
+}
+
+.btn::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.1);
+    opacity: 0;
+    transition: opacity 0.3s var(--transition);
+}
+
+.btn:hover::after {
+    opacity: 1;
 }
 
 .btn.primary-btn {
-    background: #007aff;
+    background: var(--primary);
     color: #fff;
 }
 
@@ -223,7 +280,7 @@ body {
 }
 
 .btn.danger-btn {
-    background: #ff3b30;
+    background: var(--danger);
     color: #fff;
 }
 
@@ -233,7 +290,7 @@ body {
 }
 
 .btn.success-btn {
-    background: #34c759;
+    background: var(--success);
     color: #fff;
 }
 
@@ -246,6 +303,11 @@ body {
     transform: scale(0.98);
 }
 
+.btn.refreshing .fa-sync {
+    animation: spin 1s linear infinite;
+}
+
+/* 复选框组 */
 .checkbox-group {
     display: flex;
     flex-wrap: wrap;
@@ -259,27 +321,29 @@ body {
     background: rgba(58, 58, 58, 0.9);
     padding: 5px 10px;
     border-radius: 5px;
-    transition: all 0.2s ease;
+    transition: background 0.2s ease;
 }
 
 .checkbox-group label:hover {
     background: rgba(68, 68, 68, 0.9);
 }
 
+/* 下拉菜单 */
 select.input-field {
     padding: 6px;
     background: rgba(58, 58, 58, 0.9);
     border: none;
     border-radius: 6px;
-    color: #e0e0e0;
+    color: var(--text-light);
     font-size: 0.85rem;
-    transition: all 0.2s ease;
+    transition: background 0.2s ease;
 }
 
 select.input-field:hover {
     background: rgba(68, 68, 68, 0.9);
 }
 
+/* 身份组管理 */
 .group-management {
     margin-top: 30px;
 }
@@ -298,41 +362,12 @@ select.input-field:hover {
     background: rgba(58, 58, 58, 0.9);
     padding: 8px 12px;
     border-radius: 8px;
-    transition: all 0.2s ease;
+    transition: all 0.2s var(--transition);
 }
 
 .group-item:hover {
     background: rgba(68, 68, 68, 0.9);
     transform: translateX(3px);
-}
-
-.group-members {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 8px;
-}
-
-.member {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    background: rgba(58, 58, 58, 0.9);
-    padding: 4px 8px;
-    border-radius: 4px;
-    transition: all 0.2s ease;
-}
-
-.member:hover {
-    background: rgba(68, 68, 68, 0.9);
-    transform: scale(1.03);
-}
-
-.member-avatar {
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
 }
 
 .group-form {
@@ -346,23 +381,25 @@ select.input-field:hover {
     min-width: 100px;
 }
 
+/* 状态提示 */
 .status {
     margin-left: 8px;
     font-size: 0.8rem;
     opacity: 0;
-    transition: opacity 0.3s ease;
+    transition: opacity 0.3s var(--transition);
 }
 
 .status.active.success {
     opacity: 1;
-    color: #34c759;
+    color: var(--success);
 }
 
 .status.active.error {
     opacity: 1;
-    color: #ff3b30;
+    color: var(--danger);
 }
 
+/* 页脚 */
 .footer {
     text-align: center;
     padding: 15px;
@@ -373,13 +410,14 @@ select.input-field:hover {
     background: rgba(44, 44, 44, 0.8);
     border-radius: 8px;
     margin-top: 30px;
-    transition: all 0.2s ease;
+    transition: color 0.2s ease;
 }
 
 .footer:hover {
     color: #aaa;
 }
 
+/* 动画 */
 @keyframes fadeIn {
     from { opacity: 0; }
     to { opacity: 1; }
@@ -388,4 +426,19 @@ select.input-field:hover {
 @keyframes slideIn {
     from { transform: translateY(15px); opacity: 0; }
     to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes spin {
+    100% { transform: rotate(360deg); }
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .player-list {
+        grid-template-columns: 1fr;
+    }
+
+    .group-form {
+        flex-direction: column;
+    }
 }

@@ -29,24 +29,19 @@ public class ConfigManager {
                 configFiles.put(configName, file);
                 configs.put(configName, FileUtil.loadOrCreate(file, plugin, configName));
             }
-            plugin.getLogger().info("[ConfigManager] 所有配置文件异步加载完成");
         });
     }
-
-
 
     public CompletableFuture<Void> reloadAllConfigsAsync() {
         return CompletableFuture.runAsync(() -> {
             for (String configName : configFiles.keySet()) {
                 configs.put(configName, YamlConfiguration.loadConfiguration(configFiles.get(configName)));
-                plugin.getLogger().info("已重新加载配置文件: " + configName);
             }
         });
     }
 
     public YamlConfiguration getConfig(String configName) {
-        YamlConfiguration config = configs.get(configName);
-        return config != null ? config : new YamlConfiguration(); // 防止未加载时返回 null
+        return configs.getOrDefault(configName, new YamlConfiguration());
     }
 
     public YamlConfiguration getConfig() {
@@ -126,8 +121,6 @@ public class ConfigManager {
     public JavaPlugin getPlugin() { return plugin; }
 
     public void saveConfig(String configName) {
-        YamlConfiguration config = configs.get(configName);
-        File file = configFiles.get(configName);
-        FileUtil.saveAsync(config, file, plugin);
+        FileUtil.saveAsync(configs.get(configName), configFiles.get(configName), plugin);
     }
 }

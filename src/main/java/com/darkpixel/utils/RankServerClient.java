@@ -38,14 +38,12 @@ public class RankServerClient implements Runnable {
     public void run() {
         while (running && !Thread.currentThread().isInterrupted()) {
             try {
-                Runnable task = taskQueue.take();
-                task.run();
+                taskQueue.take().run();
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 break;
             } catch (Exception e) {
                 Bukkit.getLogger().severe("RankServerClient sync task failed: " + e.getMessage());
-                e.printStackTrace();
             }
         }
     }
@@ -56,9 +54,6 @@ public class RankServerClient implements Runnable {
             syncThread.interrupt();
             try {
                 syncThread.join(5000);
-                if (syncThread.isAlive()) {
-                    Bukkit.getLogger().warning("RankServerClient sync thread did not terminate in time");
-                }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
@@ -86,7 +81,6 @@ public class RankServerClient implements Runnable {
                 client.send(request, HttpResponse.BodyHandlers.ofString());
             } catch (IOException | InterruptedException e) {
                 Bukkit.getLogger().severe("Failed to set rank for " + uuid + ": " + e.getMessage());
-                e.printStackTrace();
             }
         });
     }
@@ -102,7 +96,6 @@ public class RankServerClient implements Runnable {
                 client.send(request, HttpResponse.BodyHandlers.ofString());
             } catch (IOException | InterruptedException e) {
                 Bukkit.getLogger().severe("Failed to set score for " + uuid + ": " + e.getMessage());
-                e.printStackTrace();
             }
         });
     }
@@ -118,7 +111,6 @@ public class RankServerClient implements Runnable {
                 client.send(request, HttpResponse.BodyHandlers.ofString());
             } catch (IOException | InterruptedException e) {
                 Bukkit.getLogger().severe("Failed to set group for " + uuid + ": " + e.getMessage());
-                e.printStackTrace();
             }
         });
     }
@@ -128,7 +120,6 @@ public class RankServerClient implements Runnable {
             try {
                 Map<String, Object> playersData = listPlayers(1, Integer.MAX_VALUE);
                 if (playersData != null && "success".equals(playersData.get("status"))) {
-                    @SuppressWarnings("unchecked")
                     List<Map<String, Object>> players = (List<Map<String, Object>>) playersData.get("players");
                     for (Map<String, Object> player : players) {
                         String uuidStr = (String) player.get("uuid");
@@ -144,7 +135,6 @@ public class RankServerClient implements Runnable {
                 }
             } catch (IOException | InterruptedException e) {
                 Bukkit.getLogger().severe("Failed to sync all players: " + e.getMessage());
-                e.printStackTrace();
             }
         });
     }

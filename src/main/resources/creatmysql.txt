@@ -1,12 +1,9 @@
--- 创建数据库（如果不存在），使用 UTF8MB4 字符集以支持多语言和表情
 CREATE DATABASE IF NOT EXISTS darkpixel
     CHARACTER SET utf8mb4
     COLLATE utf8mb4_unicode_ci;
 
--- 使用 darkpixel 数据库
 USE darkpixel;
 
--- 创建 players 表（存储玩家核心信息）
 CREATE TABLE IF NOT EXISTS players (
     uuid VARCHAR(36) PRIMARY KEY,
     name VARCHAR(32) NOT NULL,
@@ -18,7 +15,7 @@ CREATE TABLE IF NOT EXISTS players (
     show_rank BOOLEAN DEFAULT FALSE,
     show_vip BOOLEAN DEFAULT FALSE,
     show_group BOOLEAN DEFAULT TRUE,
-    show_score BOOLEAN DEFAULT TRUE,  -- 新增字段
+    show_score BOOLEAN DEFAULT TRUE,
     ban_until BIGINT DEFAULT 0,
     ban_reason VARCHAR(255),
     login_count INT UNSIGNED DEFAULT 0,
@@ -35,7 +32,6 @@ CREATE TABLE IF NOT EXISTS players (
     INDEX idx_last_sign_in (last_sign_in)
 ) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
--- 创建 groups 表（存储组信息）
 CREATE TABLE IF NOT EXISTS `groups` (
     name VARCHAR(20) PRIMARY KEY,
     color VARCHAR(10),
@@ -44,18 +40,16 @@ CREATE TABLE IF NOT EXISTS `groups` (
     prefix VARCHAR(30)
 ) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
--- 创建 player_groups 表（玩家与组的多对多关系表）
 CREATE TABLE IF NOT EXISTS player_groups (
     uuid VARCHAR(36),
     group_name VARCHAR(20),
-    player_name VARCHAR(32) NOT NULL,  -- 添加 player_name 字段并设为非空
+    player_name VARCHAR(32) NOT NULL,
     PRIMARY KEY (uuid, group_name),
     FOREIGN KEY (uuid) REFERENCES players(uuid) ON DELETE CASCADE ON UPDATE CASCADE,
     FOREIGN KEY (group_name) REFERENCES `groups`(name) ON DELETE CASCADE ON UPDATE CASCADE,
     INDEX idx_group_name (group_name)
 ) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
--- 创建 bans 表（存储封禁记录）
 CREATE TABLE IF NOT EXISTS bans (
     uuid VARCHAR(36) PRIMARY KEY,
     player_name VARCHAR(32),
@@ -67,12 +61,10 @@ CREATE TABLE IF NOT EXISTS bans (
     INDEX idx_player_name (player_name)
 ) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
--- 创建 blacklist 表（存储黑名单标识符）
 CREATE TABLE IF NOT EXISTS blacklist (
     identifier VARCHAR(255) PRIMARY KEY
 ) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
--- 插入默认组数据
 INSERT IGNORE INTO `groups` (name, color, emoji, badge, prefix) VALUES
     ('op', '§c', '', '', '[OP]'),
     ('member', '§f', '', '', '[Member]'),

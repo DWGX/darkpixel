@@ -148,7 +148,7 @@ public class RankManager {
         if (validGroups.isEmpty()) validGroups.add("member");
         playerGroups.put(uuid, validGroups);
         String playerName = Bukkit.getOfflinePlayer(uuid).getName();
-        if (playerName == null) playerName = "Unknown"; // 防止 null 值
+        if (playerName == null) playerName = "Unknown";
         final String finalPlayerName = playerName;
         Global.executor.submit(() -> {
             try (Connection conn = getConnection()) {
@@ -161,7 +161,7 @@ public class RankManager {
                     for (String group : validGroups) {
                         ps.setString(1, uuid.toString());
                         ps.setString(2, group);
-                        ps.setString(3, finalPlayerName); // 添加 player_name
+                        ps.setString(3, finalPlayerName);
                         ps.addBatch();
                     }
                     ps.executeBatch();
@@ -172,6 +172,7 @@ public class RankManager {
             }
         });
     }
+
     private void saveRankToDatabaseBatch(Map<UUID, RankData> ranks) {
         int maxRetries = 3;
         for (int attempt = 1; attempt <= maxRetries; attempt++) {
