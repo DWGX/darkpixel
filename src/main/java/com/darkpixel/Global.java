@@ -101,7 +101,7 @@ public class Global {
         this.signInContainer = new SignInContainer(this, rankManager);
         this.banManager = new BanManager(this);
         this.rankServer = new RankServer(rankManager, playerData, this);
-        this.chatListener = new ChatListener(playerData, rankManager);
+        this.chatListener = new ChatListener(this);
         this.isRankServerRunning = checkPortAvailability();
         this.rankServerClient = new RankServerClient(configManager.getConfig().getString("rank_server_url", "http://localhost:" + configManager.getConfig().getInt("http_port", 25560)), this);
         new CommandManager(this);
@@ -186,103 +186,29 @@ public class Global {
         }
     }
 
-    public JavaPlugin getPlugin() {
-        return plugin;
-    }
-
-    public ConfigManager getConfigManager() {
-        return configManager;
-    }
-
-    public PlayerData getPlayerData() {
-        return playerData;
-    }
-
-    public WorldData getWorldData() {
-        return worldData;
-    }
-
-    public RankManager getRankManager() {
-        return rankManager;
-    }
-
-    public AiChatHandler getAiChat() {
-        return aiChat;
-    }
-
-    public DashboardHandler getDashboard() {
-        return dashboard;
-    }
-
-    public NpcHandler getNpcHandler() {
-        return npcHandler;
-    }
-
-    public BringBackBlocking getBringBackBlocking() {
-        return bringBackBlocking;
-    }
-
-    public LoginMessageUtil getLoginMessageUtil() {
-        return loginMessageUtil;
-    }
-
-    public PlayerFreeze getPlayerFreeze() {
-        return playerFreeze;
-    }
-
-    public MotdUtils getMotdUtils() {
-        return motdUtils;
-    }
-
-    public SitUtils getSitUtils() {
-        return sitUtils;
-    }
-
-    public YamlConfiguration getMinigameConfig() {
-        return minigameConfig;
-    }
-
-    public YamlConfiguration getCommandConfig() {
-        return commandConfig;
-    }
-
-    public AntiCheatHandler getAntiCheatHandler() {
-        return antiCheatHandler;
-    }
-
-    public ServerSwitchChest getServerSwitchChest() {
-        return serverSwitchChest;
-    }
-
-    public ServerRadioChest getServerRadioChest() {
-        return serverRadioChest;
-    }
-
-    public SignInContainer getSignInContainer() {
-        return signInContainer;
-    }
-
-    public RankServer getRankServer() {
-        return rankServer;
-    }
-
-    public BanManager getBanManager() {
-        return banManager;
-    }
-
-    public RankServerClient getRankServerClient() {
-        return rankServerClient;
-    }
-
-    public ChatListener getChatListener() {
-        return chatListener;
-    }
-
-    public boolean isRankServerRunning() {
-        return isRankServerRunning;
-    }
-
-    public YamlConfiguration getConfig() {
-        return configManager.getConfig();
-    }
+    public JavaPlugin getPlugin() { return plugin; }
+    public ConfigManager getConfigManager() { return configManager; }
+    public PlayerData getPlayerData() { return playerData; }
+    public WorldData getWorldData() { return worldData; }
+    public RankManager getRankManager() { return rankManager; }
+    public AiChatHandler getAiChat() { return aiChat; }
+    public DashboardHandler getDashboard() { return dashboard; }
+    public NpcHandler getNpcHandler() { return npcHandler; }
+    public BringBackBlocking getBringBackBlocking() { return bringBackBlocking; }
+    public LoginMessageUtil getLoginMessageUtil() { return loginMessageUtil; }
+    public PlayerFreeze getPlayerFreeze() { return playerFreeze; }
+    public MotdUtils getMotdUtils() { return motdUtils; }
+    public SitUtils getSitUtils() { return sitUtils; }
+    public YamlConfiguration getMinigameConfig() { return minigameConfig; }
+    public YamlConfiguration getCommandConfig() { return commandConfig; }
+    public AntiCheatHandler getAntiCheatHandler() { return antiCheatHandler; }
+    public ServerSwitchChest getServerSwitchChest() { return serverSwitchChest; }
+    public ServerRadioChest getServerRadioChest() { return serverRadioChest; }
+    public SignInContainer getSignInContainer() { return signInContainer; }
+    public RankServer getRankServer() { return rankServer; }
+    public BanManager getBanManager() { return banManager; }
+    public RankServerClient getRankServerClient() { return rankServerClient; }
+    public ChatListener getChatListener() { return chatListener; }
+    public boolean isRankServerRunning() { return isRankServerRunning; }
+    public YamlConfiguration getConfig() { return configManager.getConfig(); }
 }

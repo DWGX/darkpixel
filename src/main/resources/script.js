@@ -1,6 +1,7 @@
 const apiBase = "http://localhost:25560/api";
 const particles = ["FIREWORK", "FLAME", "HEART", "NOTE", "SMOKE", "VILLAGER_HAPPY"];
-const chatColors = ["normal", "§c", "§b", "§a", "§e", "§d", "rainbow", "random", "gradient"];
+// 调整chatColors以匹配后端支持的颜色
+const chatColors = ["normal", "RED", "BLUE", "GREEN", "YELLOW", "PURPLE", "random"];
 let availableGroups = [];
 let allPlayers = [];
 
@@ -73,13 +74,14 @@ const renderPlayers = (players) => {
         card.id = `player-${player.uuid}`;
         card.style.animation = `slideIn 0.3s ease forwards ${index * 0.03}s`;
         const currentGroup = player.groups && player.groups.length > 0 ? player.groups[0] : "member";
+        const stars = Math.min(Math.floor(player.score / 1000), 5);
         card.innerHTML = `
             <div class="accordion">
                 <input type="checkbox" id="toggle-${player.uuid}" class="accordion-toggle" ${isExpanded ? "checked" : ""}>
                 <label for="toggle-${player.uuid}" class="accordion-header">
                     <i class="fas fa-user"></i>
                     <span class="player-name ${player.online ? 'online' : 'offline'}">${player.name}</span>
-                    (${player.online ? "在线" : "离线"})
+                    (${player.online ? "在线" : "离线"}) <span class="stars">${"★".repeat(stars)}</span>
                 </label>
                 <div class="accordion-content">
                     <div class="scroll-content">
@@ -94,14 +96,9 @@ const renderPlayers = (players) => {
                             <label>Rank:</label>
                             <select id="rank-${player.uuid}" onchange="toggleCustomRank('${player.uuid}')" class="input-field">
                                 <option value="member" ${player.rank === "member" ? "selected" : ""}>Member</option>
-                                <option value="VIP" ${player.rank === "VIP" ? "selected" : ""}>VIP</option>
-                                <option value="SVIP" ${player.rank === "SVIP" ? "selected" : ""}>SVIP</option>
-                                <option value="VVIP" ${player.rank === "VVIP" ? "selected" : ""}>VVIP</option>
-                                <option value="UVIP" ${player.rank === "UVIP" ? "selected" : ""}>UVIP</option>
-                                <option value="EVIP" ${player.rank === "EVIP" ? "selected" : ""}>EVIP</option>
-                                <option value="custom" ${!["member", "VIP", "SVIP", "VVIP", "UVIP", "EVIP"].includes(player.rank) ? "selected" : ""}>自定义</option>
+                                <option value="custom" ${player.rank !== "member" ? "selected" : ""}>自定义</option>
                             </select>
-                            <input id="custom-rank-${player.uuid}" placeholder="输入自定义 Rank" value="${!["member", "VIP", "SVIP", "VVIP", "UVIP", "EVIP"].includes(player.rank) ? player.rank : ""}" class="input-field" style="display: ${["member", "VIP", "SVIP", "VVIP", "UVIP", "EVIP"].includes(player.rank) ? 'none' : 'inline-block'};">
+                            <input id="custom-rank-${player.uuid}" placeholder="输入自定义 Rank" value="${player.rank !== 'member' ? player.rank : ''}" class="input-field" style="display: ${player.rank === 'member' ? 'none' : 'inline-block'};">
                             <button onclick="setRank('${player.uuid}')" class="btn primary-btn"><i class="fas fa-check"></i></button>
                             <span id="rank-status-${player.uuid}" class="status"></span>
                         </p>
@@ -130,7 +127,7 @@ const renderPlayers = (players) => {
                         <p>
                             <label>发言颜色:</label>
                             <select id="chat-color-${player.uuid}" class="input-field">
-                                ${chatColors.map(c => `<option value="${c}" ${c === player.chat_color ? "selected" : ""}>${c === "normal" ? "默认" : c === "rainbow" ? "彩虹" : c === "random" ? "随机" : c === "gradient" ? "渐变" : c}</option>`).join("")}
+                                ${chatColors.map(c => `<option value="${c}" ${c === player.chat_color ? "selected" : ""}>${c === "normal" ? "默认" : c === "random" ? "随机" : c}</option>`).join("")}
                             </select>
                             <button onclick="setChatColor('${player.uuid}')" class="btn primary-btn"><i class="fas fa-check"></i></button>
                             <span id="chat-color-status-${player.uuid}" class="status"></span>
@@ -141,10 +138,21 @@ const renderPlayers = (players) => {
                                 <label><input type="checkbox" id="show-score-${player.uuid}" ${player.show_score ? "checked" : ""}> 积分</label>
                                 <label><input type="checkbox" id="show-group-${player.uuid}" ${player.show_group ? "checked" : ""}> 身份组</label>
                                 <label><input type="checkbox" id="show-rank-${player.uuid}" ${player.show_rank ? "checked" : ""}> Rank</label>
-                                <label><input type="checkbox" id="show-vip-${player.uuid}" ${player.show_vip ? "checked" : ""}> VIP</label>
                             </span>
                             <button onclick="setDisplayOptions('${player.uuid}')" class="btn primary-btn"><i class="fas fa-check"></i></button>
                             <span id="display-options-status-${player.uuid}" class="status"></span>
+                        </p>
+                        <p>
+                            <label>显示顺序:</label>
+                            <div id="sortable-${player.uuid}" class="sortable">
+                                ${["score", "group", "rank"].map(item => `
+                                    <div class="sortable-item" data-value="${item}">
+                                        ${item === "score" ? "积分" : item === "group" ? "身份组" : "Rank"}
+                                    </div>
+                                `).join("")}
+                            </div>
+                            <button onclick="setDisplayOrder('${player.uuid}')" class="btn primary-btn"><i class="fas fa-check"></i></button>
+                            <span id="order-status-${player.uuid}" class="status"></span>
                         </p>
                         <p>封禁状态: ${player.ban_until === 0 ? "未封禁" : player.ban_until === -1 ? "永久封禁" : new Date(player.ban_until).toLocaleString()}</p>
                         <p>封禁原因: ${player.ban_reason || "无"}</p>
@@ -158,6 +166,7 @@ const renderPlayers = (players) => {
             </div>
         `;
         playerList.appendChild(card);
+        initSortable(player.uuid, player.display_order);
         document.getElementById(`toggle-${player.uuid}`).addEventListener("change", () => {
             const expanded = JSON.parse(localStorage.getItem("expandedPlayers") || "[]");
             if (document.getElementById(`toggle-${player.uuid}`).checked) {
@@ -171,6 +180,36 @@ const renderPlayers = (players) => {
     });
 
     setTimeout(() => playerList.classList.add("visible"), 100);
+};
+
+const initSortable = (uuid, initialOrder) => {
+    const sortable = document.getElementById(`sortable-${uuid}`);
+    let draggedItem = null;
+
+    sortable.querySelectorAll(".sortable-item").forEach(item => {
+        item.draggable = true;
+        item.addEventListener("dragstart", () => draggedItem = item);
+        item.addEventListener("dragover", e => e.preventDefault());
+        item.addEventListener("drop", () => {
+            if (draggedItem !== item) {
+                const items = Array.from(sortable.children);
+                const draggedIndex = items.indexOf(draggedItem);
+                const targetIndex = items.indexOf(item);
+                if (draggedIndex < targetIndex) {
+                    item.after(draggedItem);
+                } else {
+                    item.before(draggedItem);
+                }
+            }
+        });
+    });
+
+    initialOrder.forEach((order, index) => {
+        const item = Array.from(sortable.children).find(i => i.dataset.value === order);
+        if (item && index < sortable.children.length) {
+            sortable.insertBefore(item, sortable.children[index]);
+        }
+    });
 };
 
 const searchPlayers = debounce(() => {
@@ -242,8 +281,13 @@ const setDisplayOptions = (uuid) => {
     const showScore = document.getElementById(`show-score-${uuid}`).checked;
     const showGroup = document.getElementById(`show-group-${uuid}`).checked;
     const showRank = document.getElementById(`show-rank-${uuid}`).checked;
-    const showVip = document.getElementById(`show-vip-${uuid}`).checked;
-    apiRequest(`set_display_options?player=${uuid}&show_score=${showScore}&show_group=${showGroup}&show_rank=${showRank}&show_vip=${showVip}`, "设置成功", "设置失败", uuid, `display-options-status-${uuid}`);
+    apiRequest(`set_display_options?player=${uuid}&show_score=${showScore}&show_group=${showGroup}&show_rank=${showRank}`, "设置成功", "设置失败", uuid, `display-options-status-${uuid}`);
+};
+
+const setDisplayOrder = (uuid) => {
+    const sortable = document.getElementById(`sortable-${uuid}`);
+    const order = Array.from(sortable.children).map(item => item.dataset.value).join(",");
+    apiRequest(`set_display_order?player=${uuid}&order=${order}`, "设置成功", "设置失败", uuid, `order-status-${uuid}`);
 };
 
 const banPlayer = async (uuid) => {
@@ -294,19 +338,16 @@ function debounce(func, wait) {
     };
 }
 
-// 事件监听
 document.getElementById("search-input").addEventListener("input", searchPlayers);
 document.getElementById("refresh-btn").addEventListener("click", async () => {
     await fetchPlayers();
     await fetchGroups();
 });
 
-// 自动刷新
 setInterval(async () => {
     await fetchPlayers();
     await fetchGroups();
 }, 40000);
 
-// 初始加载
 fetchPlayers();
 fetchGroups();

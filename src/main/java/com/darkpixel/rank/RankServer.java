@@ -9,17 +9,14 @@ import com.sun.net.httpserver.HttpServer;
 import org.bukkit.Bukkit;
 import org.bukkit.Particle;
 import org.bukkit.entity.Player;
+
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -98,6 +95,8 @@ public class RankServer implements Runnable {
                     handleSetChatColor(query, response);
                 } else if ("/api/set_display_options".equals(path) && query != null) {
                     handleSetDisplayOptions(query, response);
+                } else if ("/api/set_display_order".equals(path) && query != null) {
+                    handleSetDisplayOrder(query, response);
                 } else if ("/api/ban".equals(path) && query != null) {
                     handleBan(query, response);
                 } else if ("/api/unban".equals(path) && query != null) {
@@ -138,7 +137,7 @@ public class RankServer implements Runnable {
                 UUID uuid = rankedList.get(i).getKey();
                 RankData rankData = rankedList.get(i).getValue();
                 String name = Bukkit.getOfflinePlayer(uuid).getName();
-                if (name == null) continue; // 跳过无名玩家
+                if (name == null) continue;
                 Player player = Bukkit.getPlayer(uuid);
                 PlayerData.PlayerInfo info = playerData.getPlayerInfo(name);
                 Map<String, Object> playerData = new HashMap<>();
@@ -151,7 +150,6 @@ public class RankServer implements Runnable {
                 playerData.put("groups", rankManager.getPlayerGroups(uuid));
                 playerData.put("chat_color", rankData.getChatColor());
                 playerData.put("show_rank", rankData.isShowRank());
-                playerData.put("show_vip", rankData.isShowVip());
                 playerData.put("show_group", rankData.isShowGroup());
                 playerData.put("show_score", rankData.isShowScore());
                 playerData.put("ban_until", rankData.getBanUntil());
@@ -159,6 +157,7 @@ public class RankServer implements Runnable {
                 playerData.put("online", player != null && player.isOnline());
                 playerData.put("login_count", info.login_count);
                 playerData.put("last_sign_in", info.last_sign_in);
+                playerData.put("display_order", rankData.getDisplayOrder());
                 players.add(playerData);
             }
             response.put("status", "success");
@@ -167,6 +166,7 @@ public class RankServer implements Runnable {
             response.put("page", page);
             response.put("pageSize", pageSize);
         }
+
         private void handleListGroups(Map<String, Object> response) {
             List<Map<String, String>> groups = new ArrayList<>();
             for (RankGroup group : rankManager.getGroups().values()) {
@@ -246,12 +246,10 @@ public class RankServer implements Runnable {
         private void handleSetDisplayOptions(String query, Map<String, Object> response) {
             UUID uuid = UUID.fromString(getQueryParam(query, "player"));
             boolean showRank = Boolean.parseBoolean(getQueryParam(query, "show_rank"));
-            boolean showVip = Boolean.parseBoolean(getQueryParam(query, "show_vip"));
             boolean showGroup = Boolean.parseBoolean(getQueryParam(query, "show_group"));
             boolean showScore = Boolean.parseBoolean(getQueryParam(query, "show_score"));
             RankData data = rankManager.getAllRanks().getOrDefault(uuid, new RankData("member", 0));
             data.setShowRank(showRank);
-            data.setShowVip(showVip);
             data.setShowGroup(showGroup);
             data.setShowScore(showScore);
             rankManager.setRankByUUID(uuid, data.getRank(), data.getScore(), data.getJoinParticle(), data.getJoinMessage());
@@ -260,6 +258,14 @@ public class RankServer implements Runnable {
                 rankManager.updatePlayerDisplay(player);
                 context.getChatListener().updateCache(player);
             }
+            response.put("status", "success");
+        }
+
+        private void handleSetDisplayOrder(String query, Map<String, Object> response) {
+            UUID uuid = UUID.fromString(getQueryParam(query, "player"));
+            String orderStr = getQueryParam(query, "order");
+            List<String> order = Arrays.asList(orderStr.split(","));
+            rankManager.setDisplayOrder(uuid, order);
             response.put("status", "success");
         }
 

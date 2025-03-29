@@ -2,6 +2,8 @@ package com.darkpixel.rank;
 
 import org.bukkit.Particle;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class RankData {
@@ -11,12 +13,12 @@ public class RankData {
     private String joinMessage;
     private String chatColor;
     private boolean showRank;
-    private boolean showVip;
     private boolean showGroup;
     private boolean showScore;
     private long banUntil;
     private String banReason;
     private List<String> groups;
+    private List<String> displayOrder;
 
     public RankData(String rank, int score) {
         this.rank = rank;
@@ -24,12 +26,13 @@ public class RankData {
         this.joinParticle = Particle.FIREWORK;
         this.joinMessage = "欢迎 {player} 加入服务器！";
         this.chatColor = "normal";
-        this.showRank = false;
-        this.showVip = false;
+        this.showRank = true;
         this.showGroup = true;
         this.showScore = true;
         this.banUntil = 0;
         this.banReason = null;
+        this.groups = new ArrayList<>();
+        this.displayOrder = new ArrayList<>(Arrays.asList("score", "group", "rank"));
     }
 
     public String getRank() { return rank; }
@@ -44,8 +47,6 @@ public class RankData {
     public void setChatColor(String chatColor) { this.chatColor = chatColor; }
     public boolean isShowRank() { return showRank; }
     public void setShowRank(boolean showRank) { this.showRank = showRank; }
-    public boolean isShowVip() { return showVip; }
-    public void setShowVip(boolean showVip) { this.showVip = showVip; }
     public boolean isShowGroup() { return showGroup; }
     public void setShowGroup(boolean showGroup) { this.showGroup = showGroup; }
     public boolean isShowScore() { return showScore; }
@@ -53,7 +54,9 @@ public class RankData {
     public long getBanUntil() { return banUntil; }
     public void setBanUntil(long banUntil) { this.banUntil = banUntil; }
     public String getBanReason() { return banReason; }
-    public void setBanReason(String banReason) { this.banReason = banReason; }
+    public void setBanReason(String reason) { this.banReason = reason; }
     public List<String> getGroups() { return groups; }
     public void setGroups(List<String> groups) { this.groups = groups; }
+    public List<String> getDisplayOrder() { return displayOrder; }
+    public void setDisplayOrder(List<String> displayOrder) { this.displayOrder = displayOrder; }
 }

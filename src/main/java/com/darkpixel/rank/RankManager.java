@@ -6,17 +6,13 @@ import org.bukkit.Location;
 import org.bukkit.Particle;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
+
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class RankManager {
@@ -71,11 +67,12 @@ public class RankManager {
                 data.setJoinMessage(rs.getString("join_message") != null ? rs.getString("join_message") : "欢迎 {player} 加入服务器！");
                 data.setChatColor(rs.getString("chat_color") != null ? rs.getString("chat_color") : "normal");
                 data.setShowRank(rs.getBoolean("show_rank"));
-                data.setShowVip(rs.getBoolean("show_vip"));
                 data.setShowGroup(rs.getBoolean("show_group"));
                 data.setShowScore(rs.getBoolean("show_score"));
                 data.setBanUntil(rs.getLong("ban_until"));
                 data.setBanReason(rs.getString("ban_reason"));
+                String displayOrder = rs.getString("display_order");
+                data.setDisplayOrder(displayOrder != null ? Arrays.asList(displayOrder.split(",")) : Arrays.asList("score", "group", "rank"));
                 List<String> groups = new ArrayList<>();
                 try (PreparedStatement groupPs = conn.prepareStatement("SELECT group_name FROM player_groups WHERE uuid = ?")) {
                     groupPs.setString(1, uuid.toString());
@@ -98,7 +95,7 @@ public class RankManager {
         data.setJoinParticle(particle);
         data.setJoinMessage(joinMessage);
         allRanks.put(uuid, data);
-        Global.executor.submit(() -> saveRankToDatabaseBatch(Collections.singletonMap(uuid, data)));
+        Global.executor.submit(() -> saveRankToDatabase(data, uuid));
         updatePlayerDisplay(player);
         context.getChatListener().updateCache(player);
     }
@@ -110,7 +107,7 @@ public class RankManager {
         data.setJoinParticle(particle);
         data.setJoinMessage(joinMessage);
         allRanks.put(uuid, data);
-        Global.executor.submit(() -> saveRankToDatabaseBatch(Collections.singletonMap(uuid, data)));
+        Global.executor.submit(() -> saveRankToDatabase(data, uuid));
         Player player = Bukkit.getPlayer(uuid);
         if (player != null) updatePlayerDisplay(player);
     }
@@ -119,7 +116,7 @@ public class RankManager {
         RankData data = allRanks.getOrDefault(uuid, new RankData("member", 0));
         data.setScore(score);
         allRanks.put(uuid, data);
-        Global.executor.submit(() -> saveRankToDatabaseBatch(Collections.singletonMap(uuid, data)));
+        Global.executor.submit(() -> saveRankToDatabase(data, uuid));
         Player player = Bukkit.getPlayer(uuid);
         if (player != null) context.getChatListener().updateCache(player);
     }
@@ -173,84 +170,79 @@ public class RankManager {
         });
     }
 
-    private void saveRankToDatabaseBatch(Map<UUID, RankData> ranks) {
+    private void saveRankToDatabase(RankData data, UUID uuid) {
         int maxRetries = 3;
         for (int attempt = 1; attempt <= maxRetries; attempt++) {
             try (Connection conn = getConnection();
                  PreparedStatement ps = conn.prepareStatement(
-                         "INSERT INTO players (uuid, name, `rank`, score, join_particle, join_message, chat_color, show_rank, show_vip, show_group, show_score, ban_until, ban_reason, login_count, sign_in_count, last_sign_in, x, y, z, world, effects_enabled, particle) " +
+                         "INSERT INTO players (uuid, name, `rank`, score, join_particle, join_message, chat_color, show_rank, show_group, show_score, ban_until, ban_reason, login_count, sign_in_count, last_sign_in, x, y, z, world, effects_enabled, particle, display_order) " +
                                  "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE " +
-                                 "`rank` = ?, score = ?, join_particle = ?, join_message = ?, chat_color = ?, show_rank = ?, show_vip = ?, show_group = ?, show_score = ?, ban_until = ?, ban_reason = ?, login_count = ?, sign_in_count = ?, last_sign_in = ?, x = ?, y = ?, z = ?, world = ?, effects_enabled = ?, particle = ?")) {
-                conn.setAutoCommit(false);
-                for (Map.Entry<UUID, RankData> entry : ranks.entrySet()) {
-                    UUID uuid = entry.getKey();
-                    RankData data = entry.getValue();
-                    String playerName = Bukkit.getOfflinePlayer(uuid).getName();
-                    com.darkpixel.utils.PlayerData.PlayerInfo info = context.getPlayerData().getPlayerInfo(playerName);
-                    int login_count = info.login_count;
-                    int sign_in_count = info.sign_in_count;
-                    long last_sign_in = info.last_sign_in;
-                    Location loc = info.location != null ? info.location : new Location(Bukkit.getWorld("world"), 0, 0, 0);
+                                 "`rank` = ?, score = ?, join_particle = ?, join_message = ?, chat_color = ?, show_rank = ?, show_group = ?, show_score = ?, ban_until = ?, ban_reason = ?, login_count = ?, sign_in_count = ?, last_sign_in = ?, x = ?, y = ?, z = ?, world = ?, effects_enabled = ?, particle = ?, display_order = ?")) {
+                conn.setAutoCommit(true);
+                String playerName = Bukkit.getOfflinePlayer(uuid).getName();
+                com.darkpixel.utils.PlayerData.PlayerInfo info = context.getPlayerData().getPlayerInfo(playerName);
+                int login_count = info != null ? info.login_count : 0;
+                int sign_in_count = info != null ? info.sign_in_count : 0;
+                long last_sign_in = info != null ? info.last_sign_in : 0;
+                Location loc = info != null && info.location != null ? info.location : new Location(Bukkit.getWorld("world"), 0, 0, 0);
+                String displayOrder = String.join(",", data.getDisplayOrder());
 
-                    ps.setString(1, uuid.toString());
-                    ps.setString(2, playerName);
-                    ps.setString(3, data.getRank());
-                    ps.setInt(4, data.getScore());
-                    ps.setString(5, data.getJoinParticle().name());
-                    ps.setString(6, data.getJoinMessage());
-                    ps.setString(7, data.getChatColor());
-                    ps.setBoolean(8, data.isShowRank());
-                    ps.setBoolean(9, data.isShowVip());
-                    ps.setBoolean(10, data.isShowGroup());
-                    ps.setBoolean(11, data.isShowScore());
-                    ps.setLong(12, data.getBanUntil());
-                    ps.setString(13, data.getBanReason());
-                    ps.setInt(14, login_count);
-                    ps.setInt(15, sign_in_count);
-                    ps.setLong(16, last_sign_in);
-                    ps.setDouble(17, loc.getX());
-                    ps.setDouble(18, loc.getY());
-                    ps.setDouble(19, loc.getZ());
-                    ps.setString(20, loc.getWorld().getName());
-                    ps.setBoolean(21, info.effects_enabled);
-                    ps.setString(22, info.particle.name());
-                    ps.setString(23, data.getRank());
-                    ps.setInt(24, data.getScore());
-                    ps.setString(25, data.getJoinParticle().name());
-                    ps.setString(26, data.getJoinMessage());
-                    ps.setString(27, data.getChatColor());
-                    ps.setBoolean(28, data.isShowRank());
-                    ps.setBoolean(29, data.isShowVip());
-                    ps.setBoolean(30, data.isShowGroup());
-                    ps.setBoolean(31, data.isShowScore());
-                    ps.setLong(32, data.getBanUntil());
-                    ps.setString(33, data.getBanReason());
-                    ps.setInt(34, login_count);
-                    ps.setInt(35, sign_in_count);
-                    ps.setLong(36, last_sign_in);
-                    ps.setDouble(37, loc.getX());
-                    ps.setDouble(38, loc.getY());
-                    ps.setDouble(39, loc.getZ());
-                    ps.setString(40, loc.getWorld().getName());
-                    ps.setBoolean(41, info.effects_enabled);
-                    ps.setString(42, info.particle.name());
-                    ps.addBatch();
-                }
-                ps.executeBatch();
-                conn.commit();
+                ps.setString(1, uuid.toString());
+                ps.setString(2, playerName);
+                ps.setString(3, data.getRank());
+                ps.setInt(4, data.getScore());
+                ps.setString(5, data.getJoinParticle().name());
+                ps.setString(6, data.getJoinMessage());
+                ps.setString(7, data.getChatColor());
+                ps.setBoolean(8, data.isShowRank());
+                ps.setBoolean(9, data.isShowGroup());
+                ps.setBoolean(10, data.isShowScore());
+                ps.setLong(11, data.getBanUntil());
+                ps.setString(12, data.getBanReason());
+                ps.setInt(13, login_count);
+                ps.setInt(14, sign_in_count);
+                ps.setLong(15, last_sign_in);
+                ps.setDouble(16, loc.getX());
+                ps.setDouble(17, loc.getY());
+                ps.setDouble(18, loc.getZ());
+                ps.setString(19, loc.getWorld().getName());
+                ps.setBoolean(20, info != null && info.effects_enabled);
+                ps.setString(21, info != null && info.particle != null ? info.particle.name() : null);
+                ps.setString(22, displayOrder);
+                ps.setString(23, data.getRank());
+                ps.setInt(24, data.getScore());
+                ps.setString(25, data.getJoinParticle().name());
+                ps.setString(26, data.getJoinMessage());
+                ps.setString(27, data.getChatColor());
+                ps.setBoolean(28, data.isShowRank());
+                ps.setBoolean(29, data.isShowGroup());
+                ps.setBoolean(30, data.isShowScore());
+                ps.setLong(31, data.getBanUntil());
+                ps.setString(32, data.getBanReason());
+                ps.setInt(33, login_count);
+                ps.setInt(34, sign_in_count);
+                ps.setLong(35, last_sign_in);
+                ps.setDouble(36, loc.getX());
+                ps.setDouble(37, loc.getY());
+                ps.setDouble(38, loc.getZ());
+                ps.setString(39, loc.getWorld().getName());
+                ps.setBoolean(40, info != null && info.effects_enabled);
+                ps.setString(41, info != null && info.particle != null ? info.particle.name() : null);
+                ps.setString(42, displayOrder);
+                ps.executeUpdate();
                 return;
             } catch (SQLException e) {
-                Bukkit.getLogger().severe("Failed to save ranks to database (尝试 " + attempt + "/" + maxRetries + "): " + e.getMessage());
+                Bukkit.getLogger().severe("Failed to save rank for " + uuid + " (attempt " + attempt + "/" + maxRetries + "): " + e.getMessage());
                 if (e.getMessage().contains("Deadlock") && attempt < maxRetries) {
                     try {
                         Thread.sleep(100 * attempt);
-                        continue;
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
                         break;
                     }
+                } else {
+                    break;
                 }
-                break;
             }
         }
     }
@@ -268,16 +260,30 @@ public class RankManager {
         List<String> groups = playerGroups.getOrDefault(uuid, Collections.singletonList("member"));
         String groupPrefix = groups.isEmpty() ? "[Member]" : this.groups.get(groups.get(0)).getPrefix();
         StringBuilder display = new StringBuilder(data.getChatColor());
-        if (data.isShowScore()) display.append("[").append(data.getScore()).append("]");
-        if (data.isShowGroup()) display.append("[").append(groupPrefix).append("]");
-        if (data.isShowRank()) display.append("[").append(data.getRank()).append("]");
-        if (data.isShowVip() && !data.getRank().equals("member")) display.append("[★]");
-        display.append(player.getName());
+        int stars = data.getScore() / 1000; // 每1000分一颗星
+        String starString = stars > 0 ? "§6" + "★".repeat(Math.min(stars, 5)) : ""; // 最多5颗星
+
+        for (String part : data.getDisplayOrder()) {
+            switch (part) {
+                case "score":
+                    if (data.isShowScore()) display.append("[").append(data.getScore()).append("]");
+                    break;
+                case "group":
+                    if (data.isShowGroup()) display.append("[").append(groupPrefix).append("]");
+                    break;
+                case "rank":
+                    if (data.isShowRank()) display.append("[").append(data.getRank()).append("]");
+                    break;
+            }
+        }
+        display.append(starString).append(player.getName());
         return display.toString();
     }
 
     public void saveAll() {
-        Global.executor.submit(() -> saveRankToDatabaseBatch(allRanks));
+        for (Map.Entry<UUID, RankData> entry : allRanks.entrySet()) {
+            Global.executor.submit(() -> saveRankToDatabase(entry.getValue(), entry.getKey()));
+        }
     }
 
     public void reload() {
@@ -344,11 +350,6 @@ public class RankManager {
         return allRanks.getOrDefault(player.getUniqueId(), new RankData("member", 0)).isShowRank();
     }
 
-    public boolean isShowVip(Player player) {
-        if (player == null) return false;
-        return allRanks.getOrDefault(player.getUniqueId(), new RankData("member", 0)).isShowVip();
-    }
-
     public boolean isShowGroup(Player player) {
         if (player == null) return true;
         return allRanks.getOrDefault(player.getUniqueId(), new RankData("member", 0)).isShowGroup();
@@ -357,5 +358,17 @@ public class RankManager {
     public boolean isShowScore(Player player) {
         if (player == null) return true;
         return allRanks.getOrDefault(player.getUniqueId(), new RankData("member", 0)).isShowScore();
+    }
+
+    public void setDisplayOrder(UUID uuid, List<String> order) {
+        RankData data = allRanks.getOrDefault(uuid, new RankData("member", 0));
+        data.setDisplayOrder(order);
+        allRanks.put(uuid, data);
+        Global.executor.submit(() -> saveRankToDatabase(data, uuid));
+        Player player = Bukkit.getPlayer(uuid);
+        if (player != null) {
+            updatePlayerDisplay(player);
+            context.getChatListener().updateCache(player);
+        }
     }
 }

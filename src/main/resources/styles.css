@@ -198,13 +198,13 @@ body {
 }
 
 .accordion-toggle:checked + .accordion-header + .accordion-content {
-    max-height: 300px;
+    max-height: 350px;
     opacity: 1;
     padding: 12px;
 }
 
 .scroll-content {
-    max-height: 280px;
+    max-height: 330px;
     overflow-y: auto;
     padding-right: 5px;
 }
@@ -241,6 +241,11 @@ body {
     color: var(--danger);
     font-weight: bold;
     text-shadow: 0 0 4px rgba(255, 59, 48, 0.3);
+}
+
+.stars {
+    color: #ffcc00;
+    margin-left: 5px;
 }
 
 /* 按钮样式 */
@@ -397,6 +402,24 @@ select.input-field:hover {
 .status.active.error {
     opacity: 1;
     color: var(--danger);
+}
+
+/* 可拖拽排序 */
+.sortable {
+    display: flex;
+    gap: 5px;
+}
+
+.sortable-item {
+    background: rgba(58, 58, 58, 0.9);
+    padding: 5px 10px;
+    border-radius: 5px;
+    cursor: move;
+    transition: background 0.2s ease;
+}
+
+.sortable-item:hover {
+    background: rgba(68, 68, 68, 0.9);
 }
 
 /* 页脚 */
